@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter_cache_manager/flutter_cache_manager.dart';
+import '../utils/storage_image.dart';
 
 class SearchScreen extends StatelessWidget {
   const SearchScreen({super.key});
@@ -13,22 +15,23 @@ class SearchScreen extends StatelessWidget {
         appBar: AppBar(
           title: const Text('Search'),
           bottom: const TabBar(
-            labelColor: Color(0xFF3F51B5),
+            labelColor: Color(0xFFE53935),
             unselectedLabelColor: Colors.grey,
-            indicatorColor: Color(0xFF3F51B5),
+            indicatorColor: Color(0xFFE53935),
             labelStyle: TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
             tabs: [
-              Tab(icon: Icon(Icons.fitness_center, size: 20), text: 'Exercises'),
-              Tab(icon: Icon(Icons.precision_manufacturing, size: 20), text: 'Machines'),
+              Tab(
+                icon: Icon(Icons.fitness_center, size: 20),
+                text: 'Exercises',
+              ),
+              Tab(
+                icon: Icon(Icons.precision_manufacturing, size: 20),
+                text: 'Machines',
+              ),
             ],
           ),
         ),
-        body: const TabBarView(
-          children: [
-            _ExercisesTab(),
-            _MachinesTab(),
-          ],
-        ),
+        body: const TabBarView(children: [_ExercisesTab(), _MachinesTab()]),
       ),
     );
   }
@@ -51,7 +54,39 @@ class _ExercisesTabState extends State<_ExercisesTab> {
   String? _selectedDifficulty;
   String? _selectedMovement;
 
-  final _muscleGroups = ['All', 'Chest', 'Back', 'Shoulders', 'Arms', 'Legs', 'Core'];
+  late final Stream<QuerySnapshot> _stream =
+      FirebaseFirestore.instance.collection('exercises').snapshots();
+
+  List<QueryDocumentSnapshot>? _cachedDocs;
+  bool _preloading = false;
+  int _preloadDone = 0;
+  int _preloadTotal = 0;
+
+  Future<void> _preload(List<QueryDocumentSnapshot> docs) async {
+    if (_preloading || _cachedDocs != null) return;
+    setState(() {
+      _preloading = true;
+      _preloadTotal = docs.length;
+      _preloadDone = 0;
+    });
+    final urls = await Future.wait(docs.map((d) => getStorageUrl(exerciseImagePath(d.id))));
+    if (!mounted) return;
+    await Future.wait(urls.map((url) async {
+      if (url != null) await DefaultCacheManager().getSingleFile(url);
+      if (mounted) setState(() => _preloadDone++);
+    }));
+    if (mounted) setState(() { _cachedDocs = docs; _preloading = false; });
+  }
+
+  final _muscleGroups = [
+    'All',
+    'Chest',
+    'Back',
+    'Shoulders',
+    'Arms',
+    'Legs',
+    'Core',
+  ];
   final _difficulties = ['All', 'beginner', 'intermediate', 'advanced'];
   final _movements = ['All', 'compound', 'isolated'];
 
@@ -60,136 +95,190 @@ class _ExercisesTabState extends State<_ExercisesTab> {
     return GestureDetector(
       onTap: () => FocusScope.of(context).unfocus(),
       child: Column(
-      children: [
-        // Search bar
-        Padding(
-          padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
-          child: _SearchBar(
-            hint: 'Search exercises...',
-            onChanged: (v) => setState(() => _query = v),
-          ),
-        ),
-        const SizedBox(height: 10),
-
-        // Filters
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 20),
-          child: SizedBox(
-            height: 40,
-            child: ListView(
-              scrollDirection: Axis.horizontal,
-              children: [
-                _FilterChip(
-                  label: 'Muscle',
-                  icon: Icons.sports_gymnastics,
-                  items: _muscleGroups,
-                  selected: _selectedMuscleGroup,
-                  onChanged: (v) => setState(() => _selectedMuscleGroup = v),
-                ),
-                const SizedBox(width: 8),
-                _FilterChip(
-                  label: 'Difficulty',
-                  icon: Icons.speed,
-                  items: _difficulties,
-                  selected: _selectedDifficulty,
-                  onChanged: (v) => setState(() => _selectedDifficulty = v),
-                  displayTransform: _capitalize,
-                ),
-                const SizedBox(width: 8),
-                _FilterChip(
-                  label: 'Movement',
-                  icon: Icons.swap_horiz,
-                  items: _movements,
-                  selected: _selectedMovement,
-                  onChanged: (v) => setState(() => _selectedMovement = v),
-                  displayTransform: _capitalize,
-                ),
-              ],
+        children: [
+          // Search bar
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
+            child: _SearchBar(
+              hint: 'Search exercises...',
+              onChanged: (v) => setState(() => _query = v),
             ),
           ),
-        ),
-        const SizedBox(height: 10),
+          const SizedBox(height: 10),
 
-        // Results
-        Expanded(
-          child: StreamBuilder<QuerySnapshot>(
-            stream: FirebaseFirestore.instance.collection('exercises').snapshots(),
-            builder: (context, snapshot) {
-              if (snapshot.connectionState == ConnectionState.waiting) {
-                return const Center(child: CircularProgressIndicator());
-              }
-              if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-                return const Center(child: Text('No exercises found'));
-              }
-
-              final docs = snapshot.data!.docs.where((doc) {
-                final data = doc.data() as Map<String, dynamic>;
-                final name = (data['exercise_name'] ?? '') as String;
-                final matchQuery = _query.isEmpty ||
-                    name.toLowerCase().contains(_query.toLowerCase());
-
-                final muscles = data['muscle_involvements'] as List<dynamic>? ?? [];
-                final primaryMuscleIds = muscles
-                    .where((m) => m['involvement'] == 'primary')
-                    .map((m) => m['muscle_id'] as String)
-                    .toList();
-                final matchMuscle = _selectedMuscleGroup == null ||
-                    _selectedMuscleGroup == 'All' ||
-                    _muscleInGroup(primaryMuscleIds, _selectedMuscleGroup!);
-
-                final matchDiff = _selectedDifficulty == null ||
-                    _selectedDifficulty == 'All' ||
-                    data['difficulty_level'] == _selectedDifficulty;
-
-                final matchMove = _selectedMovement == null ||
-                    _selectedMovement == 'All' ||
-                    data['movement_type'] == _selectedMovement;
-
-                return matchQuery && matchMuscle && matchDiff && matchMove;
-              }).toList();
-
-              if (docs.isEmpty) {
-                return Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.search_off, size: 48, color: Colors.grey[300]),
-                      const SizedBox(height: 8),
-                      Text('No matching exercises',
-                          style: TextStyle(color: Colors.grey[400], fontSize: 15)),
-                    ],
+          // Filters
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: SizedBox(
+              height: 30,
+              child: ListView(
+                scrollDirection: Axis.horizontal,
+                children: [
+                  _FilterChip(
+                    label: 'Muscle',
+                    icon: Icons.sports_gymnastics,
+                    items: _muscleGroups,
+                    selected: _selectedMuscleGroup,
+                    onChanged: (v) => setState(() => _selectedMuscleGroup = v),
                   ),
-                );
-              }
-
-              return ListView.separated(
-                padding: const EdgeInsets.fromLTRB(20, 4, 20, 20),
-                itemCount: docs.length,
-                separatorBuilder: (_, __) => const SizedBox(height: 8),
-                itemBuilder: (context, index) {
-                  final data = docs[index].data() as Map<String, dynamic>;
-                  return _ExerciseCard(data: data);
-                },
-              );
-            },
+                  const SizedBox(width: 8),
+                  _FilterChip(
+                    label: 'Difficulty',
+                    icon: Icons.speed,
+                    items: _difficulties,
+                    selected: _selectedDifficulty,
+                    onChanged: (v) => setState(() => _selectedDifficulty = v),
+                    displayTransform: _capitalize,
+                  ),
+                  const SizedBox(width: 8),
+                  _FilterChip(
+                    label: 'Movement',
+                    icon: Icons.swap_horiz,
+                    items: _movements,
+                    selected: _selectedMovement,
+                    onChanged: (v) => setState(() => _selectedMovement = v),
+                    displayTransform: _capitalize,
+                  ),
+                ],
+              ),
+            ),
           ),
-        ),
-      ],
-    ),
+          const SizedBox(height: 10),
+
+          // Results
+          Expanded(
+            child: StreamBuilder<QuerySnapshot>(
+              stream: _stream,
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting &&
+                    _cachedDocs == null) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+                if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                  return const Center(child: Text('No exercises found'));
+                }
+
+                // Trigger preload once
+                if (_cachedDocs == null && !_preloading) {
+                  WidgetsBinding.instance.addPostFrameCallback(
+                    (_) => _preload(snapshot.data!.docs),
+                  );
+                }
+
+                // Show preload progress
+                if (_preloading || _cachedDocs == null) {
+                  return Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        SizedBox(
+                          width: 160,
+                          child: LinearProgressIndicator(
+                            value: _preloadTotal > 0
+                                ? _preloadDone / _preloadTotal
+                                : null,
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        Text(
+                          'Loading images... $_preloadDone / $_preloadTotal',
+                          style: TextStyle(color: Colors.grey[500], fontSize: 13),
+                        ),
+                      ],
+                    ),
+                  );
+                }
+
+                final docs = _cachedDocs!.where((doc) {
+                  final data = doc.data() as Map<String, dynamic>;
+                  final name = (data['exercise_name'] ?? '') as String;
+                  final matchQuery =
+                      _query.isEmpty ||
+                      name.toLowerCase().contains(_query.toLowerCase());
+
+                  final muscles =
+                      data['muscle_involvements'] as List<dynamic>? ?? [];
+                  final primaryMuscleNames = muscles
+                      .where((m) => m['involvement_type'] == 'primary')
+                      .map((m) => (m['muscle_name'] as String).toLowerCase())
+                      .toList();
+                  final matchMuscle =
+                      _selectedMuscleGroup == null ||
+                      _selectedMuscleGroup == 'All' ||
+                      _muscleInGroup(primaryMuscleNames, _selectedMuscleGroup!);
+
+                  final matchDiff =
+                      _selectedDifficulty == null ||
+                      _selectedDifficulty == 'All' ||
+                      data['difficulty_level'] == _selectedDifficulty;
+
+                  final matchMove =
+                      _selectedMovement == null ||
+                      _selectedMovement == 'All' ||
+                      data['movement_type'] == _selectedMovement;
+
+                  return matchQuery && matchMuscle && matchDiff && matchMove;
+                }).toList();
+
+                if (docs.isEmpty) {
+                  return Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.search_off,
+                          size: 48,
+                          color: Colors.grey[300],
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'No matching exercises',
+                          style: TextStyle(
+                            color: Colors.grey[400],
+                            fontSize: 15,
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                }
+
+                return ListView.separated(
+                  padding: const EdgeInsets.fromLTRB(20, 4, 20, 20),
+                  itemCount: docs.length,
+                  separatorBuilder: (_, __) => const SizedBox(height: 8),
+                  itemBuilder: (context, index) {
+                    final doc = docs[index];
+                    final data = doc.data() as Map<String, dynamic>;
+                    return _ExerciseCard(data: data, docId: doc.id);
+                  },
+                );
+              },
+            ),
+          ),
+        ],
+      ),
     );
   }
 
-  bool _muscleInGroup(List<String> muscleIds, String group) {
+  bool _muscleInGroup(List<String> muscleNames, String group) {
     const groupMap = {
-      'Chest': ['pectoralis_major', 'pectoralis_minor'],
-      'Back': ['latissimus_dorsi', 'trapezius', 'rhomboids', 'erector_spinae'],
-      'Shoulders': ['anterior_deltoid', 'lateral_deltoid', 'posterior_deltoid'],
-      'Arms': ['biceps_brachii', 'triceps_brachii', 'brachialis', 'forearm_flexors', 'forearm_extensors'],
+      'Chest': ['pectoralis major', 'pectoralis minor'],
+      'Back': ['latissimus dorsi', 'trapezius', 'rhomboids', 'erector spinae'],
+      'Shoulders': ['anterior deltoid', 'lateral deltoid', 'posterior deltoid'],
+      'Arms': [
+        'biceps brachii',
+        'triceps brachii',
+        'brachialis',
+        'forearm flexors',
+        'forearm extensors',
+      ],
       'Legs': ['quadriceps', 'hamstrings', 'glutes', 'calves', 'adductors'],
-      'Core': ['rectus_abdominis', 'obliques', 'transverse_abdominis'],
+      'Core': ['rectus abdominis', 'obliques', 'transverse abdominis'],
     };
-    final ids = groupMap[group] ?? [];
-    return muscleIds.any((id) => ids.contains(id));
+    final names = groupMap[group] ?? [];
+    return muscleNames.any((n) => names.contains(n));
   }
 }
 
@@ -208,99 +297,172 @@ class _MachinesTabState extends State<_MachinesTab> {
   String _query = '';
   String? _selectedMachineType;
 
-  final _machineTypes = ['All', 'free_weight', 'machine', 'cable', 'bodyweight'];
+  late final Stream<QuerySnapshot> _stream =
+      FirebaseFirestore.instance.collection('machines').snapshots();
+
+  List<QueryDocumentSnapshot>? _cachedDocs;
+  bool _preloading = false;
+  int _preloadDone = 0;
+  int _preloadTotal = 0;
+
+  Future<void> _preload(List<QueryDocumentSnapshot> docs) async {
+    if (_preloading || _cachedDocs != null) return;
+    setState(() {
+      _preloading = true;
+      _preloadTotal = docs.length;
+      _preloadDone = 0;
+    });
+    final urls = await Future.wait(docs.map((d) => getStorageUrl(machineImagePath(d.id))));
+    if (!mounted) return;
+    await Future.wait(urls.map((url) async {
+      if (url != null) await DefaultCacheManager().getSingleFile(url);
+      if (mounted) setState(() => _preloadDone++);
+    }));
+    if (mounted) setState(() { _cachedDocs = docs; _preloading = false; });
+  }
+
+  final _machineTypes = [
+    'All',
+    'free_weight',
+    'machine',
+    'cable',
+    'bodyweight',
+  ];
 
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: () => FocusScope.of(context).unfocus(),
       child: Column(
-      children: [
-        // Search bar
-        Padding(
-          padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
-          child: _SearchBar(
-            hint: 'Search machines...',
-            onChanged: (v) => setState(() => _query = v),
-          ),
-        ),
-        const SizedBox(height: 10),
-
-        // Filters
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 20),
-          child: SizedBox(
-            height: 40,
-            child: ListView(
-              scrollDirection: Axis.horizontal,
-              children: [
-                _FilterChip(
-                  label: 'Type',
-                  icon: Icons.category,
-                  items: _machineTypes,
-                  selected: _selectedMachineType,
-                  onChanged: (v) => setState(() => _selectedMachineType = v),
-                  displayTransform: _formatSnakeCase,
-                ),
-              ],
+        children: [
+          // Search bar
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
+            child: _SearchBar(
+              hint: 'Search machines...',
+              onChanged: (v) => setState(() => _query = v),
             ),
           ),
-        ),
-        const SizedBox(height: 10),
+          const SizedBox(height: 10),
 
-        // Results
-        Expanded(
-          child: StreamBuilder<QuerySnapshot>(
-            stream: FirebaseFirestore.instance.collection('machines').snapshots(),
-            builder: (context, snapshot) {
-              if (snapshot.connectionState == ConnectionState.waiting) {
-                return const Center(child: CircularProgressIndicator());
-              }
-              if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-                return const Center(child: Text('No machines found'));
-              }
-
-              final docs = snapshot.data!.docs.where((doc) {
-                final data = doc.data() as Map<String, dynamic>;
-                final name = (data['machine_name'] ?? '') as String;
-                final matchQuery = _query.isEmpty ||
-                    name.toLowerCase().contains(_query.toLowerCase());
-
-                final matchType = _selectedMachineType == null ||
-                    _selectedMachineType == 'All' ||
-                    data['machine_type'] == _selectedMachineType;
-
-                return matchQuery && matchType;
-              }).toList();
-
-              if (docs.isEmpty) {
-                return Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.search_off, size: 48, color: Colors.grey[300]),
-                      const SizedBox(height: 8),
-                      Text('No matching machines',
-                          style: TextStyle(color: Colors.grey[400], fontSize: 15)),
-                    ],
+          // Filters
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: SizedBox(
+              height: 40,
+              child: ListView(
+                scrollDirection: Axis.horizontal,
+                children: [
+                  _FilterChip(
+                    label: 'Type',
+                    icon: Icons.category,
+                    items: _machineTypes,
+                    selected: _selectedMachineType,
+                    onChanged: (v) => setState(() => _selectedMachineType = v),
+                    displayTransform: _formatSnakeCase,
                   ),
-                );
-              }
-
-              return ListView.separated(
-                padding: const EdgeInsets.fromLTRB(20, 4, 20, 20),
-                itemCount: docs.length,
-                separatorBuilder: (_, __) => const SizedBox(height: 8),
-                itemBuilder: (context, index) {
-                  final data = docs[index].data() as Map<String, dynamic>;
-                  return _MachineCard(data: data);
-                },
-              );
-            },
+                ],
+              ),
+            ),
           ),
-        ),
-      ],
-    ),
+          const SizedBox(height: 10),
+
+          // Results
+          Expanded(
+            child: StreamBuilder<QuerySnapshot>(
+              stream: _stream,
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting &&
+                    _cachedDocs == null) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+                if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                  return const Center(child: Text('No machines found'));
+                }
+
+                if (_cachedDocs == null && !_preloading) {
+                  WidgetsBinding.instance.addPostFrameCallback(
+                    (_) => _preload(snapshot.data!.docs),
+                  );
+                }
+
+                if (_preloading || _cachedDocs == null) {
+                  return Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        SizedBox(
+                          width: 160,
+                          child: LinearProgressIndicator(
+                            value: _preloadTotal > 0
+                                ? _preloadDone / _preloadTotal
+                                : null,
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        Text(
+                          'Loading images... $_preloadDone / $_preloadTotal',
+                          style: TextStyle(color: Colors.grey[500], fontSize: 13),
+                        ),
+                      ],
+                    ),
+                  );
+                }
+
+                final docs = _cachedDocs!.where((doc) {
+                  final data = doc.data() as Map<String, dynamic>;
+                  final name = (data['equipment_name'] ?? '') as String;
+                  final matchQuery =
+                      _query.isEmpty ||
+                      name.toLowerCase().contains(_query.toLowerCase());
+
+                  final matchType =
+                      _selectedMachineType == null ||
+                      _selectedMachineType == 'All' ||
+                      data['equipment_type'] == _selectedMachineType;
+
+                  return matchQuery && matchType;
+                }).toList();
+
+                if (docs.isEmpty) {
+                  return Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.search_off,
+                          size: 48,
+                          color: Colors.grey[300],
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'No matching machines',
+                          style: TextStyle(
+                            color: Colors.grey[400],
+                            fontSize: 15,
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                }
+
+                return ListView.separated(
+                  padding: const EdgeInsets.fromLTRB(20, 4, 20, 20),
+                  itemCount: docs.length,
+                  separatorBuilder: (_, __) => const SizedBox(height: 8),
+                  itemBuilder: (context, index) {
+                    final doc = docs[index];
+                    final data = doc.data() as Map<String, dynamic>;
+                    return _MachineCard(data: data, docId: doc.id);
+                  },
+                );
+              },
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -372,29 +534,38 @@ class _FilterChip extends StatelessWidget {
       onSelected: onChanged,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       itemBuilder: (context) => items
-          .map((item) => PopupMenuItem(
-                value: item,
-                child: Text(displayTransform != null ? displayTransform!(item) : item),
-              ))
+          .map(
+            (item) => PopupMenuItem(
+              value: item,
+              child: Text(
+                displayTransform != null ? displayTransform!(item) : item,
+              ),
+            ),
+          )
           .toList(),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
         decoration: BoxDecoration(
-          color: isActive ? const Color(0xFF3F51B5) : Colors.white,
+          color: isActive ? const Color(0xFFE53935) : Colors.white,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
-            color: isActive ? const Color(0xFF3F51B5) : Colors.grey.shade300,
+            color: isActive ? const Color(0xFFE53935) : Colors.grey.shade300,
           ),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: 16,
-                color: isActive ? Colors.white : Colors.grey[600]),
+            Icon(
+              icon,
+              size: 16,
+              color: isActive ? Colors.white : Colors.grey[600],
+            ),
             const SizedBox(width: 6),
             Text(
               isActive
-                  ? (displayTransform != null ? displayTransform!(selected!) : selected!)
+                  ? (displayTransform != null
+                        ? displayTransform!(selected!)
+                        : selected!)
                   : label,
               style: TextStyle(
                 fontSize: 13,
@@ -403,8 +574,11 @@ class _FilterChip extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 4),
-            Icon(Icons.keyboard_arrow_down, size: 18,
-                color: isActive ? Colors.white : Colors.grey[600]),
+            Icon(
+              Icons.keyboard_arrow_down,
+              size: 18,
+              color: isActive ? Colors.white : Colors.grey[600],
+            ),
           ],
         ),
       ),
@@ -418,8 +592,9 @@ class _FilterChip extends StatelessWidget {
 
 class _ExerciseCard extends StatelessWidget {
   final Map<String, dynamic> data;
+  final String docId;
 
-  const _ExerciseCard({required this.data});
+  const _ExerciseCard({required this.data, required this.docId});
 
   @override
   Widget build(BuildContext context) {
@@ -427,11 +602,6 @@ class _ExerciseCard extends StatelessWidget {
     final diff = data['difficulty_level'] ?? '';
     final moveType = data['movement_type'] ?? '';
     final isCompound = data['is_compound'] == true;
-    final muscles = data['muscle_involvements'] as List<dynamic>? ?? [];
-    final primaryMuscles = muscles
-        .where((m) => m['involvement'] == 'primary')
-        .map((m) => _formatSnakeCase(m['muscle_id'] as String))
-        .toList();
 
     return GestureDetector(
       onTap: () {
@@ -439,9 +609,9 @@ class _ExerciseCard extends StatelessWidget {
         _showExerciseDetail(context);
       },
       child: Container(
-        padding: const EdgeInsets.all(16),
+        height: 160,
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: Colors.grey[200],
           borderRadius: BorderRadius.circular(18),
           boxShadow: [
             BoxShadow(
@@ -451,41 +621,72 @@ class _ExerciseCard extends StatelessWidget {
             ),
           ],
         ),
-        child: Row(
+        clipBehavior: Clip.antiAlias,
+        child: Stack(
+          fit: StackFit.expand,
           children: [
-            // Icon — monochrome, no background box
-            Icon(
-              isCompound ? Icons.fitness_center : Icons.track_changes,
-              size: 28,
-              color: Colors.grey[700],
-            ),
-            const SizedBox(width: 14),
-            // Text area
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(name,
-                      style: const TextStyle(
-                          fontSize: 15, fontWeight: FontWeight.w700)),
-                  const SizedBox(height: 4),
-                  Text(
-                    primaryMuscles.join(', '),
-                    style: TextStyle(color: Colors.grey[500], fontSize: 13),
-                  ),
-                  const SizedBox(height: 8),
-                  // Metadata chips — muted, pill-style
-                  Row(
-                    children: [
-                      _mutedPill(_capitalize(diff)),
-                      const SizedBox(width: 6),
-                      _mutedPill(_capitalize(moveType)),
-                    ],
-                  ),
-                ],
+            // Full image
+            StorageImage(
+              key: ValueKey(docId),
+              storagePath: exerciseImagePath(docId),
+              width: double.infinity,
+              height: 160,
+              fit: BoxFit.cover,
+              cropTop: 40,
+              placeholder: Container(
+                color: Colors.grey[100],
+                child: Icon(
+                  isCompound ? Icons.fitness_center : Icons.track_changes,
+                  size: 40,
+                  color: Colors.grey[400],
+                ),
               ),
             ),
-            Icon(Icons.chevron_right, color: Colors.grey[350], size: 22),
+            // Subtle gradient at bottom
+            Positioned(
+              bottom: 0,
+              left: 0,
+              right: 0,
+              child: Container(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.bottomCenter,
+                    end: Alignment.topCenter,
+                    colors: [
+                      Colors.black.withOpacity(0.55),
+                      Colors.transparent,
+                    ],
+                    stops: const [0.0, 1.0],
+                  ),
+                ),
+                padding: const EdgeInsets.fromLTRB(12, 28, 12, 12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // Tags
+                    Row(
+                      children: [
+                        _overlayPill(_capitalize(diff)),
+                        const SizedBox(width: 6),
+                        _overlayPill(_capitalize(moveType)),
+                      ],
+                    ),
+                    const SizedBox(height: 5),
+                    // Name
+                    Text(
+                      name,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
+                        shadows: [Shadow(color: Colors.black54, blurRadius: 4)],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
           ],
         ),
       ),
@@ -510,13 +711,31 @@ class _ExerciseCard extends StatelessWidget {
     );
   }
 
+  Widget _overlayPill(String text) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: Colors.black.withOpacity(0.38),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Text(
+        text,
+        style: const TextStyle(
+          color: Colors.white,
+          fontSize: 11,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+    );
+  }
+
   void _showExerciseDetail(BuildContext context) {
     final name = data['exercise_name'] ?? '';
     final desc = data['description'] ?? '';
     final diff = data['difficulty_level'] ?? '';
     final pattern = data['movement_pattern'] ?? '';
     final muscles = data['muscle_involvements'] as List<dynamic>? ?? [];
-    final machines = data['machines'] as List<dynamic>? ?? [];
+    final equipment = data['equipment'] as List<dynamic>? ?? [];
 
     showModalBottomSheet(
       context: context,
@@ -544,12 +763,12 @@ class _ExerciseCard extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 16),
-            Text(name,
-                style: const TextStyle(
-                    fontSize: 22, fontWeight: FontWeight.w800)),
+            Text(
+              name,
+              style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800),
+            ),
             const SizedBox(height: 6),
-            Text(desc,
-                style: TextStyle(color: Colors.grey[600], fontSize: 14)),
+            Text(desc, style: TextStyle(color: Colors.grey[600], fontSize: 14)),
             const SizedBox(height: 12),
             Row(
               children: [
@@ -559,12 +778,13 @@ class _ExerciseCard extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 20),
-            const Text('Muscles',
-                style: TextStyle(
-                    fontSize: 16, fontWeight: FontWeight.w700)),
+            const Text(
+              'Muscles',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+            ),
             const SizedBox(height: 8),
             ...muscles.map((m) {
-              final pct = m['activation_pct'] ?? 0;
+              final pct = (m['activation_percentage'] ?? 0) as num;
               return Padding(
                 padding: const EdgeInsets.only(bottom: 8),
                 child: Row(
@@ -572,7 +792,7 @@ class _ExerciseCard extends StatelessWidget {
                     SizedBox(
                       width: 120,
                       child: Text(
-                        _formatSnakeCase(m['muscle_id']),
+                        m['muscle_name'] ?? '',
                         style: const TextStyle(fontSize: 13),
                       ),
                     ),
@@ -584,33 +804,34 @@ class _ExerciseCard extends StatelessWidget {
                           minHeight: 8,
                           backgroundColor: Colors.grey[200],
                           valueColor: AlwaysStoppedAnimation(
-                            _involvementColor(m['involvement']),
+                            _involvementColor(m['involvement_type'] ?? ''),
                           ),
                         ),
                       ),
                     ),
                     const SizedBox(width: 8),
-                    Text('$pct%',
-                        style: TextStyle(
-                            fontSize: 12, color: Colors.grey[600])),
+                    Text(
+                      '$pct%',
+                      style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                    ),
                   ],
                 ),
               );
             }),
-            if (machines.isNotEmpty) ...[
+            if (equipment.isNotEmpty) ...[
               const SizedBox(height: 16),
-              const Text('Machines',
-                  style: TextStyle(
-                      fontSize: 16, fontWeight: FontWeight.w700)),
+              const Text(
+                'Equipment',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+              ),
               const SizedBox(height: 8),
               Wrap(
                 spacing: 8,
                 runSpacing: 8,
-                children: machines.map<Widget>((m) {
-                  final id = m['machine_id'] as String;
+                children: equipment.map<Widget>((e) {
+                  final name = e['equipment_name'] as String? ?? '';
                   return Chip(
-                    label: Text(_formatSnakeCase(id),
-                        style: const TextStyle(fontSize: 13)),
+                    label: Text(name, style: const TextStyle(fontSize: 13)),
                     backgroundColor: Colors.grey[100],
                   );
                 }).toList(),
@@ -625,7 +846,7 @@ class _ExerciseCard extends StatelessWidget {
   Color _involvementColor(String involvement) {
     switch (involvement) {
       case 'primary':
-        return const Color(0xFF3F51B5);
+        return const Color(0xFFE53935);
       case 'secondary':
         return const Color(0xFF00897B);
       case 'stabilizer':
@@ -642,8 +863,9 @@ class _ExerciseCard extends StatelessWidget {
 
 class _MachineCard extends StatelessWidget {
   final Map<String, dynamic> data;
+  final String docId;
 
-  const _MachineCard({required this.data});
+  const _MachineCard({required this.data, required this.docId});
 
   IconData _typeIcon(String type) {
     switch (type) {
@@ -660,16 +882,33 @@ class _MachineCard extends StatelessWidget {
     }
   }
 
+  Widget _overlayPill(String text) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: Colors.black.withOpacity(0.38),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Text(
+        text,
+        style: const TextStyle(
+          color: Colors.white,
+          fontSize: 11,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final name = data['machine_name'] ?? '';
-    final type = data['machine_type'] ?? '';
-    final desc = data['description'] ?? '';
+    final name = data['equipment_name'] ?? '';
+    final type = data['equipment_type'] ?? '';
 
     return Container(
-      padding: const EdgeInsets.all(16),
+      height: 160,
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: Colors.grey[200],
         borderRadius: BorderRadius.circular(18),
         boxShadow: [
           BoxShadow(
@@ -679,43 +918,55 @@ class _MachineCard extends StatelessWidget {
           ),
         ],
       ),
-      child: Row(
+      clipBehavior: Clip.antiAlias,
+      child: Stack(
+        fit: StackFit.expand,
         children: [
-          // Icon — monochrome, no background box
-          Icon(_typeIcon(type), size: 28, color: Colors.grey[700]),
-          const SizedBox(width: 14),
-          // Text area
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(name,
+          // Full image
+          StorageImage(
+            key: ValueKey(docId),
+            storagePath: machineImagePath(docId),
+            width: double.infinity,
+            height: 160,
+            fit: BoxFit.cover,
+            cropTop: 40,
+            placeholder: Container(
+              color: Colors.grey[100],
+              child: Icon(_typeIcon(type), size: 40, color: Colors.grey[400]),
+            ),
+          ),
+          // Subtle gradient at bottom
+          Positioned(
+            bottom: 0,
+            left: 0,
+            right: 0,
+            child: Container(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.bottomCenter,
+                  end: Alignment.topCenter,
+                  colors: [Colors.black.withOpacity(0.55), Colors.transparent],
+                  stops: const [0.0, 1.0],
+                ),
+              ),
+              padding: const EdgeInsets.fromLTRB(12, 28, 12, 12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _overlayPill(_formatSnakeCase(type)),
+                  const SizedBox(height: 5),
+                  Text(
+                    name,
                     style: const TextStyle(
-                        fontSize: 15, fontWeight: FontWeight.w700)),
-                const SizedBox(height: 4),
-                Text(desc,
-                    style: TextStyle(color: Colors.grey[500], fontSize: 13),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis),
-                const SizedBox(height: 8),
-                // Metadata chip — muted, pill-style
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: Colors.grey[100],
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Text(
-                    _formatSnakeCase(type),
-                    style: TextStyle(
-                      color: Colors.grey[600],
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
+                      color: Colors.white,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                      shadows: [Shadow(color: Colors.black54, blurRadius: 4)],
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ],
@@ -733,5 +984,8 @@ String _capitalize(String s) =>
 
 String _formatSnakeCase(String s) {
   if (s == 'All') return s;
-  return s.split('_').map((w) => w.isEmpty ? w : w[0].toUpperCase() + w.substring(1)).join(' ');
+  return s
+      .split('_')
+      .map((w) => w.isEmpty ? w : w[0].toUpperCase() + w.substring(1))
+      .join(' ');
 }

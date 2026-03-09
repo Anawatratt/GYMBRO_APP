@@ -68,7 +68,7 @@ class _CustomPlanScreenState extends State<CustomPlanScreen> {
                         padding: const EdgeInsets.symmetric(horizontal: 18),
                         decoration: BoxDecoration(
                           color: isSelected
-                              ? const Color(0xFF3F51B5)
+                              ? const Color(0xFFE53935)
                               : Colors.white,
                           borderRadius: BorderRadius.circular(12),
                         ),
@@ -115,14 +115,14 @@ class _CustomPlanScreenState extends State<CustomPlanScreen> {
                                       padding: const EdgeInsets.symmetric(
                                           horizontal: 10, vertical: 4),
                                       decoration: BoxDecoration(
-                                        color: const Color(0xFF3F51B5)
+                                        color: const Color(0xFFE53935)
                                             .withAlpha(25),
                                         borderRadius: BorderRadius.circular(10),
                                       ),
                                       child: Text(
                                         item['muscle']!,
                                         style: const TextStyle(
-                                          color: Color(0xFF3F51B5),
+                                          color: Color(0xFFE53935),
                                           fontSize: 12,
                                           fontWeight: FontWeight.w500,
                                         ),

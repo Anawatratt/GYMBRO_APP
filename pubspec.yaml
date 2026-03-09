@@ -39,6 +39,10 @@ dependencies:
   cloud_firestore: ^6.1.2
   firebase_ui_auth: ^3.0.1
   flutter_riverpod: ^2.6.1
+  fl_chart: ^0.70.2
+  firebase_storage: ^13.0.6
+  cached_network_image: ^3.4.1
+  flutter_cache_manager: ^3.4.1
 
 dev_dependencies:
   flutter_test:

@@ -9,7 +9,13 @@
       "Bash(git stash push:*)",
       "Bash(git add:*)",
       "Bash(flutter devices:*)",
-      "Bash(flutter run:*)"
+      "Bash(flutter run:*)",
+      "Bash(grep:*)",
+      "Bash(ls:*)",
+      "Bash(dart:*)",
+      "Bash(flutter config:*)",
+      "Bash(rm -rf /c/Users/ASUS/AppData/Local/Android/Sdk/ndk/29.0.14206865/)",
+      "Read(//c/Users/ASUS/AppData/Local/Android/Sdk/ndk//**)"
     ]
   }
 }

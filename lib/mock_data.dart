@@ -107,7 +107,7 @@ final List<Plan> mockPlans = [
   Plan(
     title: 'Full Body',
     icon: Icons.fitness_center,
-    color: const Color(0xFF3F51B5),
+    color: const Color(0xFFE53935),
     calories: 450,
     durationMin: 45,
     exercisesCount: 8,
@@ -137,7 +137,7 @@ final List<Trainee> mockTrainees = [
     id: 'jj',
     name: 'JJ',
     initials: 'JJ',
-    avatarColor: const Color(0xFF3F51B5),
+    avatarColor: const Color(0xFFE53935),
     workoutsCompleted: 3,
     totalSets: 1240,
     totalReps: 9510,

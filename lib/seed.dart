@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 
 // ── Seed Runner ─────────────────────────────────────────
@@ -10,13 +11,331 @@ import 'package:flutter/foundation.dart';
 Future<void> seedAll() async {
   final db = FirebaseFirestore.instance;
 
+  await seedUsers(db);
   await seedMuscles(db);
   await seedMuscleGroups(db);
   await seedMachines(db);
   await seedExercises(db);
   await seedPrograms(db);
+  await seedWorkoutHistory(db);
 
   debugPrint('--- All seeding completed ---');
+}
+
+// ═══════════════════════════════════════════════════════════
+// WORKOUT HISTORY — John Smith, ~2-3 months of PPL workouts
+// ═══════════════════════════════════════════════════════════
+
+Future<void> seedWorkoutHistory(FirebaseFirestore db) async {
+  final auth = FirebaseAuth.instance;
+  try {
+    await auth.signInWithEmailAndPassword(
+      email: 'john123@gymbro.internal',
+      password: 'gymbro123',
+    );
+  } catch (e) {
+    debugPrint('seedWorkoutHistory: could not sign in as John: $e');
+    return;
+  }
+
+  // ใช้ Auth UID ตรงๆ เพื่อให้แน่ใจว่าตรงกับ currentUser ตอน login
+  final uid = auth.currentUser!.uid;
+  debugPrint('seedWorkoutHistory: John uid = $uid');
+
+  // ลบ data เก่าทิ้งก่อน (force reseed)
+  final oldDocs = await db.collection('workout_history').where('user_id', isEqualTo: uid).get();
+  debugPrint('seedWorkoutHistory: deleting ${oldDocs.docs.length} old docs');
+  for (final d in oldDocs.docs) { await d.reference.delete(); }
+
+  final now = DateTime.now();
+  DateTime d(int daysAgo, int hour) =>
+      DateTime(now.year, now.month, now.day, hour, 0)
+          .subtract(Duration(days: daysAgo));
+
+  // ignore: prefer_function_declarations_over_variables
+  Map<String, dynamic> s(String name, DateTime date, List<Map<String,dynamic>> exs) => {
+    'user_id': uid,
+    'program_name': 'PPL Program',
+    'session_name': name,
+    'completed_at': Timestamp.fromDate(date),
+    'exercises': exs,
+  };
+  Map<String,dynamic> ex(String id, int sets, int reps, double weight) =>
+      {'exercise_id': id, 'sets': sets, 'reps': reps, 'weight': weight};
+
+  final sessions = <Map<String, dynamic>>[
+    // ── Week 11 (~75 วันที่แล้ว) เพิ่งเริ่ม ยังไม่ชัวร์ ทำไม่ครบ ──
+    s('Push Day', d(76, 19), [
+      ex('flat_barbell_bench_press', 3, 8,  60.0),
+      ex('dumbbell_shoulder_press',  3, 10, 18.0),
+      ex('dumbbell_lateral_raise',   3, 12,  8.0),
+      ex('cable_tricep_pushdown',    3, 12, 22.5),
+      // ลืม incline
+    ]),
+    s('Leg Day', d(74, 18), [
+      ex('barbell_squat',       3, 8,  70.0),
+      ex('high_foot_leg_press', 3, 12, 100.0),
+      ex('leg_curl',            3, 12, 35.0),
+      ex('leg_extension',       3, 12, 32.5),
+      // ข้าม calf raise
+    ]),
+    // ข้าม Pull วันนั้น
+
+    // ── Week 10 ──
+    s('Push Day', d(69, 20), [
+      ex('flat_barbell_bench_press', 4, 6,  62.5),
+      ex('incline_chest_press',      3, 10, 40.0),
+      ex('dumbbell_shoulder_press',  3, 10, 20.0),
+      ex('dumbbell_lateral_raise',   3, 12,  8.0),
+      ex('cable_tricep_pushdown',    3, 12, 25.0),
+    ]),
+    s('Pull Day', d(67, 19), [
+      ex('barbell_row',   4, 6,  55.0),
+      ex('lat_pulldown',  3, 10, 47.5),
+      ex('barbell_curl',  3, 12, 22.5),
+      ex('face_pull',     3, 15, 17.5),
+      // ข้าม seated_row วันนั้น
+    ]),
+    // ข้าม Legs (ขี้เกียจ)
+
+    // ── Week 9 ──
+    s('Push Day', d(62, 18), [
+      ex('flat_barbell_bench_press', 4, 6,  65.0),
+      ex('incline_chest_press',      3, 10, 42.5),
+      ex('dumbbell_shoulder_press',  3, 10, 20.0),
+      ex('dumbbell_lateral_raise',   4, 12, 10.0),
+      ex('cable_tricep_pushdown',    3, 12, 27.5),
+    ]),
+    s('Pull Day', d(60, 19), [
+      ex('barbell_row',   4, 6,  57.5),
+      ex('lat_pulldown',  3, 10, 50.0),
+      ex('seated_row',    3, 12, 45.0),
+      ex('barbell_curl',  3, 10, 25.0),
+      ex('face_pull',     3, 15, 20.0),
+    ]),
+    s('Leg Day', d(58, 17), [
+      ex('barbell_squat',       4, 6,  72.5),
+      ex('high_foot_leg_press', 3, 12, 110.0),
+      ex('leg_curl',            3, 12, 37.5),
+      ex('leg_extension',       3, 12, 37.5),
+      ex('seated_calf_raise',   4, 15, 42.5),
+    ]),
+
+    // ── Week 8 (ป่วยนิดหน่อย ทำแค่ Push+Pull) ──
+    s('Push Day', d(55, 20), [
+      ex('flat_barbell_bench_press', 4, 5,  65.0), // ล้าหน่อย reps น้อยลง
+      ex('incline_chest_press',      3, 10, 42.5),
+      ex('dumbbell_shoulder_press',  3, 10, 22.0),
+      ex('cable_tricep_pushdown',    3, 12, 27.5),
+    ]),
+    s('Pull Day', d(53, 19), [
+      ex('barbell_row',   4, 6,  60.0),
+      ex('lat_pulldown',  3, 10, 52.5),
+      ex('seated_row',    3, 12, 47.5),
+      ex('barbell_curl',  3, 10, 25.0),
+      ex('face_pull',     3, 15, 20.0),
+    ]),
+    // Legs ป่วย ไม่ได้ทำ
+
+    // ── Week 7 (ข้าม Push แต่ทำ Pull+Legs) ──
+    s('Pull Day', d(46, 18), [
+      ex('barbell_row',   4, 6,  60.0),
+      ex('lat_pulldown',  3, 10, 55.0),
+      ex('seated_row',    3, 12, 50.0),
+      ex('barbell_curl',  4, 10, 27.5),
+      ex('face_pull',     3, 15, 22.5),
+    ]),
+    s('Leg Day', d(44, 17), [
+      ex('barbell_squat',       4, 5,  77.5), // PR attempt ไม่ค่อยสำเร็จ
+      ex('high_foot_leg_press', 3, 10, 120.0),
+      ex('leg_curl',            3, 12, 40.0),
+      ex('leg_extension',       3, 12, 40.0),
+      ex('seated_calf_raise',   4, 15, 45.0),
+    ]),
+
+    // ── Week 6 (กลับมาครบ มีพลัง) ──
+    s('Push Day', d(41, 19), [
+      ex('flat_barbell_bench_press', 4, 6,  67.5),
+      ex('incline_chest_press',      3, 10, 45.0),
+      ex('dumbbell_shoulder_press',  3, 10, 22.0),
+      ex('dumbbell_lateral_raise',   4, 12, 10.0),
+      ex('cable_tricep_pushdown',    3, 12, 30.0),
+    ]),
+    s('Pull Day', d(39, 18), [
+      ex('barbell_row',   4, 6,  62.5),
+      ex('lat_pulldown',  3, 10, 57.5),
+      ex('seated_row',    3, 12, 50.0),
+      ex('barbell_curl',  3, 10, 27.5),
+      ex('face_pull',     3, 15, 22.5),
+    ]),
+    s('Leg Day', d(37, 17), [
+      ex('barbell_squat',       4, 6,  80.0),
+      ex('high_foot_leg_press', 4, 10, 120.0),
+      ex('leg_curl',            3, 12, 42.5),
+      ex('leg_extension',       3, 12, 42.5),
+      ex('seated_calf_raise',   4, 15, 47.5),
+    ]),
+
+    // ── Week 5 (งานยุ่ง ข้าม Push) ──
+    s('Pull Day', d(32, 20), [
+      ex('barbell_row',   4, 6,  65.0),
+      ex('lat_pulldown',  3, 10, 60.0),
+      ex('seated_row',    3, 12, 52.5),
+      ex('barbell_curl',  3, 10, 30.0),
+      ex('face_pull',     3, 15, 22.5),
+    ]),
+    s('Leg Day', d(30, 18), [
+      ex('barbell_squat',       4, 6,  82.5),
+      ex('high_foot_leg_press', 4, 10, 125.0),
+      ex('leg_curl',            3, 12, 42.5),
+      ex('leg_extension',       4, 12, 42.5),
+      ex('seated_calf_raise',   4, 15, 50.0),
+    ]),
+
+    // ── Week 4 (ครบทุกวัน จุดที่ดีที่สุด) ──
+    s('Push Day', d(27, 19), [
+      ex('flat_barbell_bench_press', 4, 6,  70.0),
+      ex('incline_chest_press',      3, 10, 47.5),
+      ex('dumbbell_shoulder_press',  3, 10, 24.0),
+      ex('dumbbell_lateral_raise',   4, 12, 12.0),
+      ex('cable_tricep_pushdown',    4, 12, 32.5),
+    ]),
+    s('Pull Day', d(25, 18), [
+      ex('barbell_row',   4, 6,  67.5),
+      ex('lat_pulldown',  3, 10, 62.5),
+      ex('seated_row',    3, 12, 55.0),
+      ex('barbell_curl',  4, 10, 30.0),
+      ex('face_pull',     3, 15, 25.0),
+    ]),
+    s('Leg Day', d(23, 17), [
+      ex('barbell_squat',       4, 6,  85.0),
+      ex('high_foot_leg_press', 4, 10, 130.0),
+      ex('leg_curl',            3, 12, 45.0),
+      ex('leg_extension',       3, 12, 45.0),
+      ex('seated_calf_raise',   4, 15, 52.5),
+    ]),
+
+    // ── Week 3 (Push+Pull ข้าม Legs วันศุกร์ไปดูหนัง) ──
+    s('Push Day', d(20, 20), [
+      ex('flat_barbell_bench_press', 4, 6,  72.5),
+      ex('incline_chest_press',      3, 10, 50.0),
+      ex('dumbbell_shoulder_press',  3, 10, 24.0),
+      ex('dumbbell_lateral_raise',   4, 12, 12.0),
+      ex('cable_tricep_pushdown',    4, 12, 35.0),
+    ]),
+    s('Pull Day', d(18, 19), [
+      ex('barbell_row',   4, 6,  70.0),
+      ex('lat_pulldown',  3, 10, 65.0),
+      ex('seated_row',    3, 12, 57.5),
+      ex('barbell_curl',  4, 10, 32.5),
+      ex('face_pull',     3, 15, 25.0),
+    ]),
+    // Legs ไปดูหนัง
+
+    // ── Week 2 (ครบ มีพลัง น้ำหนักขึ้น) ──
+    s('Push Day', d(13, 19), [
+      ex('flat_barbell_bench_press', 4, 6,  75.0),
+      ex('incline_chest_press',      3, 10, 52.5),
+      ex('dumbbell_shoulder_press',  4, 10, 26.0),
+      ex('dumbbell_lateral_raise',   4, 12, 14.0),
+      ex('cable_tricep_pushdown',    4, 12, 35.0),
+    ]),
+    s('Pull Day', d(11, 18), [
+      ex('barbell_row',   4, 6,  72.5),
+      ex('lat_pulldown',  3, 10, 67.5),
+      ex('seated_row',    4, 12, 60.0),
+      ex('barbell_curl',  4, 10, 32.5),
+      ex('face_pull',     4, 15, 27.5),
+    ]),
+    s('Leg Day', d(9, 17), [
+      ex('barbell_squat',       4, 6,  87.5),
+      ex('high_foot_leg_press', 4, 10, 140.0),
+      ex('leg_curl',            4, 12, 47.5),
+      ex('leg_extension',       4, 12, 47.5),
+      ex('seated_calf_raise',   4, 15, 55.0),
+    ]),
+
+    // ── Week 1 (ล่าสุด Push+Pull ยังไม่ถึงวัน Legs) ──
+    s('Push Day', d(6, 19), [
+      ex('flat_barbell_bench_press', 4, 6,  77.5),
+      ex('incline_chest_press',      3, 10, 55.0),
+      ex('dumbbell_shoulder_press',  4, 10, 26.0),
+      ex('dumbbell_lateral_raise',   4, 12, 14.0),
+      ex('cable_tricep_pushdown',    4, 12, 37.5),
+    ]),
+    s('Pull Day', d(4, 18), [
+      ex('barbell_row',   4, 6,  75.0),
+      ex('lat_pulldown',  4, 10, 70.0),
+      ex('seated_row',    4, 12, 62.5),
+      ex('barbell_curl',  4, 10, 35.0),
+      ex('face_pull',     4, 15, 27.5),
+    ]),
+    // Legs ยังไม่ถึงวัน
+  ];
+
+  for (final session in sessions) {
+    await db.collection('workout_history').add(session);
+  }
+  debugPrint('✅ Seeded ${sessions.length} realistic sessions for John (uid=$uid)');
+  await auth.signOut();
+}
+
+// ═══════════════════════════════════════════════════════════
+// 0. USERS — สร้าง Firebase Auth + Firestore document
+//    email จะถูกสร้างในรูปแบบ {username}@gymbro.internal
+// ═══════════════════════════════════════════════════════════
+
+const _seedUsers = <Map<String, String>>[
+  {
+    'username': 'john123',
+    'name': 'John Smith',
+    'password': 'gymbro123',
+    'image_url':
+        'https://i.pravatar.cc/150?img=11',
+  },
+  {
+    'username': 'jane456',
+    'name': 'Jane Doe',
+    'password': 'gymbro123',
+    'image_url':
+        'https://i.pravatar.cc/150?img=47',
+  },
+  {
+    'username': 'mike789',
+    'name': 'Mike Johnson',
+    'password': 'gymbro123',
+    'image_url':
+        'https://i.pravatar.cc/150?img=68',
+  },
+];
+
+Future<void> seedUsers(FirebaseFirestore db) async {
+  final auth = FirebaseAuth.instance;
+
+  for (final u in _seedUsers) {
+    final email = '${u['username']}@gymbro.internal';
+    try {
+      final cred = await auth.createUserWithEmailAndPassword(
+        email: email,
+        password: u['password']!,
+      );
+      await db.collection('users').doc(cred.user!.uid).set({
+        'username': u['username'],
+        'name': u['name'],
+        'image_url': u['image_url'],
+        'friends': <String>[],
+        'active_program_id': null,
+        'created_at': FieldValue.serverTimestamp(),
+      });
+      debugPrint('Seeded user: ${u['username']}');
+    } catch (e) {
+      debugPrint('Skip ${u['username']}: $e');
+    }
+  }
+
+  // ลง sign out หลัง seed เสร็จ (ไม่ให้ค้าง session ของ seed user)
+  await auth.signOut();
+  debugPrint('Seeded users (${_seedUsers.length})');
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -277,9 +596,10 @@ Future<void> seedMachines(FirebaseFirestore db) async {
   final batch = db.batch();
   for (final m in _machines) {
     batch.set(db.collection('machines').doc(m['id'] as String), {
-      'machine_name': m['machine_name'],
-      'machine_type': m['machine_type'],
+      'equipment_name': m['equipment_name'],
+      'equipment_type': m['equipment_type'],
       'description': m['description'],
+      'status': m['status'],
       'created_at': FieldValue.serverTimestamp(),
     });
   }
@@ -288,111 +608,334 @@ Future<void> seedMachines(FirebaseFirestore db) async {
 }
 
 const _machines = <Map<String, dynamic>>[
-  // Free weights
   {
-    'id': 'barbell',
-    'machine_name': 'Barbell',
-    'machine_type': 'free_weight',
-    'description': 'Standard Olympic barbell for compound lifts',
+    'id': 'aerobic_fitness_area_gym',
+    'equipment_name': 'Aerobic fitness area gym',
+    'equipment_type': 'area',
+    'description': 'พื้นที่โล่งสำหรับแอโรบิกและออกกำลังกายเป็นกลุ่ม',
+    'status': 'ACTIVE',
   },
   {
-    'id': 'dumbbells',
-    'machine_name': 'Dumbbells',
-    'machine_type': 'free_weight',
-    'description': 'Pair of dumbbells for unilateral and isolation work',
+    'id': 'assisted_pull_up_machine',
+    'equipment_name': 'Assisted Pull Up Machine',
+    'equipment_type': 'machine',
+    'description': 'เครื่องช่วย pull-up และ dip แบบถ่วงน้ำหนัก',
+    'status': 'ACTIVE',
   },
   {
-    'id': 'kettlebell',
-    'machine_name': 'Kettlebell',
-    'machine_type': 'free_weight',
-    'description': 'Cast iron weight for dynamic movements',
-  },
-  {
-    'id': 'ez_curl_bar',
-    'machine_name': 'EZ Curl Bar',
-    'machine_type': 'free_weight',
-    'description': 'Curved bar for bicep and tricep exercises',
+    'id': 'barbell_rack',
+    'equipment_name': 'Barbell Rack',
+    'equipment_type': 'free_weight',
+    'description': 'ชั้นวาง barbell และแผ่นน้ำหนัก',
+    'status': 'ACTIVE',
   },
   {
     'id': 'bench',
-    'machine_name': 'Bench',
-    'machine_type': 'free_weight',
-    'description': 'Flat/incline/decline bench',
+    'equipment_name': 'Bench',
+    'equipment_type': 'free_weight',
+    'description': 'ม้านั่งปรับองศาได้สำหรับท่า free weight',
+    'status': 'ACTIVE',
   },
-  // Machines
+  {
+    'id': 'cable_chest_fly',
+    'equipment_name': 'Cable Chest Fly',
+    'equipment_type': 'cable',
+    'description': 'สถานี cable สำหรับท่า chest fly',
+    'status': 'ACTIVE',
+  },
+  {
+    'id': 'cable_crossover_machine',
+    'equipment_name': 'Cable Crossover Machine',
+    'equipment_type': 'cable',
+    'description': 'เครื่อง cable คู่สำหรับท่า chest fly และ crossover',
+    'status': 'ACTIVE',
+  },
+  {
+    'id': 'captain_chair_abs_station',
+    'equipment_name': 'Captain Chair Abs Station',
+    'equipment_type': 'bodyweight',
+    'description': 'เก้าอี้ captain สำหรับท่า hanging leg raise และ knee tuck',
+    'status': 'ACTIVE',
+  },
+  {
+    'id': 'cardio_zone_gym',
+    'equipment_name': 'Cardio zone gym',
+    'equipment_type': 'area',
+    'description': 'โซนเฉพาะสำหรับอุปกรณ์คาร์ดิโอ',
+    'status': 'ACTIVE',
+  },
   {
     'id': 'chest_press_machine',
-    'machine_name': 'Chest Press Machine',
-    'machine_type': 'machine',
-    'description': 'Guided chest press movement',
+    'equipment_name': 'Chest Press Machine',
+    'equipment_type': 'machine',
+    'description': 'เครื่อง chest press แบบใช้แผ่นหรือ selectorized',
+    'status': 'ACTIVE',
   },
   {
-    'id': 'leg_press_machine',
-    'machine_name': 'Leg Press Machine',
-    'machine_type': 'machine',
-    'description': 'Seated leg press with weight stack',
+    'id': 'curve_treadmill',
+    'equipment_name': 'Curve Treadmill',
+    'equipment_type': 'machine',
+    'description': 'ลู่วิ่งโค้งแบบแมนนวล',
+    'status': 'ACTIVE',
+  },
+  {
+    'id': 'dual_lat_machine',
+    'equipment_name': 'Dual Lat Machine',
+    'equipment_type': 'machine',
+    'description': 'เครื่อง lat pulldown อิสระสองแขน',
+    'status': 'ACTIVE',
+  },
+  {
+    'id': 'dumbbell_rack',
+    'equipment_name': 'Dumbbell Rack',
+    'equipment_type': 'free_weight',
+    'description': 'ชั้นวาง dumbbell',
+    'status': 'ACTIVE',
+  },
+  {
+    'id': 'ez_curl_bar_rack',
+    'equipment_name': 'EZ Curl Bar Rack',
+    'equipment_type': 'free_weight',
+    'description': 'ชั้นวาง EZ curl bar',
+    'status': 'ACTIVE',
+  },
+  {
+    'id': 'flat_barbell_bench_press_station',
+    'equipment_name': 'Flat Barbell Bench Press Station',
+    'equipment_type': 'machine',
+    'description': 'สถานี bench press แนวราบ',
+    'status': 'ACTIVE',
+  },
+  {
+    'id': 'gym_locker',
+    'equipment_name': 'Gym locker',
+    'equipment_type': 'facility',
+    'description': 'ตู้ล็อกเกอร์สำหรับเก็บของสมาชิก',
+    'status': 'ACTIVE',
+  },
+  {
+    'id': 'gym_reception_counter',
+    'equipment_name': 'Gym reception counter',
+    'equipment_type': 'facility',
+    'description': 'เคาน์เตอร์ต้อนรับส่วนหน้าของฟิตเนส',
+    'status': 'ACTIVE',
+  },
+  {
+    'id': 'gym_vending_machine',
+    'equipment_name': 'Gym vending machine',
+    'equipment_type': 'facility',
+    'description': 'ตู้ขายของอัตโนมัติสำหรับอาหารและอาหารเสริม',
+    'status': 'ACTIVE',
+  },
+  {
+    'id': 'hip_abductor_machine',
+    'equipment_name': 'Hip Abductor Machine',
+    'equipment_type': 'machine',
+    'description': 'เครื่อง isolate กล้ามเนื้อกางสะโพก',
+    'status': 'ACTIVE',
+  },
+  {
+    'id': 'hip_adductor_machine',
+    'equipment_name': 'Hip Adductor Machine',
+    'equipment_type': 'machine',
+    'description': 'เครื่อง isolate กล้ามเนื้อหุบสะโพก',
+    'status': 'ACTIVE',
+  },
+  {
+    'id': 'incline_barbell_bench_press_station',
+    'equipment_name': 'Incline Barbell Bench Press Station',
+    'equipment_type': 'machine',
+    'description': 'สถานี bench press แบบเอียงขึ้น',
+    'status': 'ACTIVE',
+  },
+  {
+    'id': 'incline_chest_press_machine',
+    'equipment_name': 'Incline Chest Press Machine',
+    'equipment_type': 'machine',
+    'description': 'เครื่อง chest press แบบเอียงเน้นหน้าอกบน',
+    'status': 'ACTIVE',
+  },
+  {
+    'id': 'lat_pull',
+    'equipment_name': 'Lat Pull',
+    'equipment_type': 'machine',
+    'description': 'เครื่อง lat pull สำหรับการดึงแนวตั้ง',
+    'status': 'ACTIVE',
   },
   {
     'id': 'lat_pulldown_machine',
-    'machine_name': 'Lat Pulldown Machine',
-    'machine_type': 'machine',
-    'description': 'Vertical pulling machine for back',
+    'equipment_name': 'Lat Pulldown Machine',
+    'equipment_type': 'machine',
+    'description': 'เครื่อง cable สำหรับท่า lat pulldown',
+    'status': 'ACTIVE',
   },
   {
-    'id': 'leg_extension_machine',
-    'machine_name': 'Leg Extension Machine',
-    'machine_type': 'machine',
-    'description': 'Isolated quadriceps extension',
+    'id': 'lateral_raise_machine',
+    'equipment_name': 'Lateral Raise Machine',
+    'equipment_type': 'machine',
+    'description': 'เครื่อง isolate การกางไหล่ด้านข้าง',
+    'status': 'ACTIVE',
   },
   {
     'id': 'leg_curl_machine',
-    'machine_name': 'Leg Curl Machine',
-    'machine_type': 'machine',
-    'description': 'Isolated hamstring curl',
+    'equipment_name': 'Leg Curl Machine',
+    'equipment_type': 'machine',
+    'description': 'เครื่อง isolate กล้ามเนื้อ hamstring',
+    'status': 'ACTIVE',
+  },
+  {
+    'id': 'leg_extension_machine',
+    'equipment_name': 'Leg Extension Machine',
+    'equipment_type': 'machine',
+    'description': 'เครื่อง isolate กล้ามเนื้อ quadriceps',
+    'status': 'ACTIVE',
+  },
+  {
+    'id': 'lying_leg_curl_machine',
+    'equipment_name': 'Lying Leg Curl Machine',
+    'equipment_type': 'machine',
+    'description': 'เครื่อง leg curl แบบนอนคว่ำ',
+    'status': 'ACTIVE',
+  },
+  {
+    'id': 'olympic_lifting_platform',
+    'equipment_name': 'Olympic Lifting Platform',
+    'equipment_type': 'free_weight',
+    'description': 'แพลตฟอร์มสำหรับ Olympic lifting',
+    'status': 'ACTIVE',
+  },
+  {
+    'id': 'pec_deck_fly',
+    'equipment_name': 'Pec Deck Fly',
+    'equipment_type': 'machine',
+    'description': 'เครื่อง pec deck สำหรับ isolate หน้าอก',
+    'status': 'ACTIVE',
+  },
+  {
+    'id': 'preacher_curl_machine',
+    'equipment_name': 'Preacher Curl Machine',
+    'equipment_type': 'machine',
+    'description': 'เครื่องสำหรับท่า preacher curl',
+    'status': 'ACTIVE',
+  },
+  {
+    'id': 'roman_chair',
+    'equipment_name': 'Roman Chair',
+    'equipment_type': 'bodyweight',
+    'description': 'Roman chair สำหรับท่า back extension และ core',
+    'status': 'ACTIVE',
+  },
+  {
+    'id': 'row_machine',
+    'equipment_name': 'Row Machine',
+    'equipment_type': 'machine',
+    'description': 'เครื่อง rowing สำหรับกล้ามเนื้อหลัง',
+    'status': 'ACTIVE',
+  },
+  {
+    'id': 'rowing_machine',
+    'equipment_name': 'Rowing Machine',
+    'equipment_type': 'machine',
+    'description': 'เครื่อง rowing ในร่มสำหรับคาร์ดิโอ',
+    'status': 'ACTIVE',
+  },
+  {
+    'id': 'seated_cable_row',
+    'equipment_name': 'Seated Cable Row',
+    'equipment_type': 'cable',
+    'description': 'สถานี cable row แบบนั่งสำหรับดึงแนวนอน',
+    'status': 'ACTIVE',
+  },
+  {
+    'id': 'seated_calf_press_machine',
+    'equipment_name': 'Seated Calf Press Machine',
+    'equipment_type': 'machine',
+    'description': 'เครื่องนั่งสำหรับท่า calf raise',
+    'status': 'ACTIVE',
+  },
+  {
+    'id': 'seated_crunch_machine',
+    'equipment_name': 'Seated Crunch Machine',
+    'equipment_type': 'machine',
+    'description': 'เครื่องนั่ง isolate กล้ามเนื้อท้อง',
+    'status': 'ACTIVE',
+  },
+  {
+    'id': 'seated_leg_curl_machine',
+    'equipment_name': 'Seated Leg Curl Machine',
+    'equipment_type': 'machine',
+    'description': 'เครื่อง leg curl แบบนั่งสำหรับ hamstrings',
+    'status': 'ACTIVE',
+  },
+  {
+    'id': 'seated_leg_press_machine',
+    'equipment_name': 'Seated Leg Press Machine',
+    'equipment_type': 'machine',
+    'description': 'เครื่อง leg press แบบนั่งแนวนอน',
+    'status': 'ACTIVE',
+  },
+  {
+    'id': 'seated_row_machine',
+    'equipment_name': 'Seated Row Machine',
+    'equipment_type': 'machine',
+    'description': 'เครื่อง cable row แบบนั่งสำหรับความหนาของหลัง',
+    'status': 'ACTIVE',
+  },
+  {
+    'id': 'seated_shoulder_press',
+    'equipment_name': 'Seated Shoulder Press',
+    'equipment_type': 'machine',
+    'description': 'สถานี shoulder press แบบนั่ง',
+    'status': 'ACTIVE',
+  },
+  {
+    'id': 'seated_triceps_press',
+    'equipment_name': 'Seated Triceps Press',
+    'equipment_type': 'machine',
+    'description': 'เครื่องนั่งสำหรับท่า triceps press',
+    'status': 'ACTIVE',
   },
   {
     'id': 'shoulder_press_machine',
-    'machine_name': 'Shoulder Press Machine',
-    'machine_type': 'machine',
-    'description': 'Guided overhead press movement',
-  },
-  {
-    'id': 'pec_fly_machine',
-    'machine_name': 'Pec Fly Machine',
-    'machine_type': 'machine',
-    'description': 'Chest isolation machine',
+    'equipment_name': 'Shoulder Press Machine',
+    'equipment_type': 'machine',
+    'description': 'เครื่องสำหรับท่า overhead shoulder press',
+    'status': 'ACTIVE',
   },
   {
     'id': 'smith_machine',
-    'machine_name': 'Smith Machine',
-    'machine_type': 'machine',
-    'description': 'Fixed barbell path machine',
-  },
-  // Cable
-  {
-    'id': 'cable_machine',
-    'machine_name': 'Cable Machine',
-    'machine_type': 'cable',
-    'description': 'Adjustable cable pulley system',
-  },
-  // Bodyweight
-  {
-    'id': 'pullup_bar',
-    'machine_name': 'Pull-up Bar',
-    'machine_type': 'bodyweight',
-    'description': 'Bar for pull-ups and chin-ups',
+    'equipment_name': 'Smith Machine',
+    'equipment_type': 'machine',
+    'description': 'เครื่อง barbell แบบราง fixed สำหรับท่าต่างๆ',
+    'status': 'ACTIVE',
   },
   {
-    'id': 'dip_station',
-    'machine_name': 'Dip Station',
-    'machine_type': 'bodyweight',
-    'description': 'Parallel bars for dips',
+    'id': 'squat_rack',
+    'equipment_name': 'Squat Rack',
+    'equipment_type': 'machine',
+    'description': 'Power rack สำหรับ squat และ press',
+    'status': 'ACTIVE',
   },
   {
-    'id': 'none',
-    'machine_name': 'None',
-    'machine_type': 'bodyweight',
-    'description': 'No machine needed',
+    'id': 'standing_leg_curl_machine',
+    'equipment_name': 'Standing Leg Curl Machine',
+    'equipment_type': 'machine',
+    'description': 'เครื่อง leg curl ขาเดียวแบบยืน',
+    'status': 'ACTIVE',
+  },
+  {
+    'id': 'tricep_extension_machine',
+    'equipment_name': 'Tricep Extension Machine',
+    'equipment_type': 'machine',
+    'description': 'เครื่อง isolate tricep extension',
+    'status': 'ACTIVE',
+  },
+  {
+    'id': 'v_squat_machine',
+    'equipment_name': 'V Squat Machine',
+    'equipment_type': 'machine',
+    'description': 'เครื่อง V-squat เน้น quad',
+    'status': 'ACTIVE',
   },
 ];
 
@@ -400,18 +943,19 @@ const _machines = <Map<String, dynamic>>[
 // 4. EXERCISES (28 exercises, with muscle & machine embedded)
 // ═══════════════════════════════════════════════════════════
 
+
 Future<void> seedExercises(FirebaseFirestore db) async {
   final batch = db.batch();
   for (final e in _exercises) {
     batch.set(db.collection('exercises').doc(e['id'] as String), {
-      'exercise_name': e['exercise_name'],
+      'exercise_name': e['name'],
       'movement_type': e['movement_type'],
       'movement_pattern': e['movement_pattern'],
       'description': e['description'],
       'difficulty_level': e['difficulty_level'],
       'is_compound': e['is_compound'],
-      'muscle_involvements': e['muscle_involvements'],
-      'machines': e['machines'],
+      'muscle_involvements': e['muscles'],
+      'equipment': e['equipment'],
       'created_at': FieldValue.serverTimestamp(),
     });
   }
@@ -420,737 +964,1025 @@ Future<void> seedExercises(FirebaseFirestore db) async {
 }
 
 const _exercises = <Map<String, dynamic>>[
-  // ── Chest ──
   {
-    'id': 'barbell_bench_press',
-    'exercise_name': 'Barbell Bench Press',
+    'id': 'flat_barbell_bench_press',
+    'name': 'Flat Barbell Bench Press',
     'movement_type': 'compound',
-    'movement_pattern': 'horizontal_push',
-    'description': 'Classic compound chest exercise',
+    'movement_pattern': 'horizontal push',
+    'description': 'เบนช์เพรสท่าราบด้วยบาร์เบล',
     'difficulty_level': 'intermediate',
     'is_compound': true,
-    'muscle_involvements': [
-      {
-        'muscle_id': 'pectoralis_major',
-        'involvement': 'primary',
-        'activation_pct': 70,
-      },
-      {
-        'muscle_id': 'anterior_deltoid',
-        'involvement': 'secondary',
-        'activation_pct': 20,
-      },
-      {
-        'muscle_id': 'triceps_brachii',
-        'involvement': 'secondary',
-        'activation_pct': 10,
-      },
+    'muscles': [
+      {'muscle_name': 'Pectoralis Major', 'involvement_type': 'primary', 'activation_percentage': 70},
+      {'muscle_name': 'Anterior Deltoid', 'involvement_type': 'secondary', 'activation_percentage': 15},
+      {'muscle_name': 'Triceps Brachii', 'involvement_type': 'secondary', 'activation_percentage': 15}
     ],
-    'machines': [
-      {'machine_id': 'barbell', 'is_required': true},
-      {'machine_id': 'bench', 'is_required': true},
-    ],
-  },
-  {
-    'id': 'dumbbell_bench_press',
-    'exercise_name': 'Dumbbell Bench Press',
-    'movement_type': 'compound',
-    'movement_pattern': 'horizontal_push',
-    'description': 'Dumbbell variation of bench press',
-    'difficulty_level': 'intermediate',
-    'is_compound': true,
-    'muscle_involvements': [
-      {
-        'muscle_id': 'pectoralis_major',
-        'involvement': 'primary',
-        'activation_pct': 70,
-      },
-      {
-        'muscle_id': 'anterior_deltoid',
-        'involvement': 'secondary',
-        'activation_pct': 20,
-      },
-      {
-        'muscle_id': 'triceps_brachii',
-        'involvement': 'secondary',
-        'activation_pct': 10,
-      },
-    ],
-    'machines': [
-      {'machine_id': 'dumbbells', 'is_required': true},
-      {'machine_id': 'bench', 'is_required': true},
+    'equipment': [
+      {'equipment_name': 'Flat Barbell Bench Press Station', 'is_required': true},
+      {'equipment_name': 'Barbell Rack', 'is_required': true}
     ],
   },
   {
     'id': 'incline_barbell_bench_press',
-    'exercise_name': 'Incline Barbell Bench Press',
+    'name': 'Incline Barbell Bench Press',
     'movement_type': 'compound',
-    'movement_pattern': 'incline_push',
-    'description': 'Targets upper chest',
+    'movement_pattern': 'incline push',
+    'description': 'เบนช์เพรสแบบลาดเอียงเน้นอกส่วนบน',
     'difficulty_level': 'intermediate',
     'is_compound': true,
-    'muscle_involvements': [
-      {
-        'muscle_id': 'pectoralis_major',
-        'involvement': 'primary',
-        'activation_pct': 60,
-      },
-      {
-        'muscle_id': 'anterior_deltoid',
-        'involvement': 'primary',
-        'activation_pct': 30,
-      },
-      {
-        'muscle_id': 'triceps_brachii',
-        'involvement': 'secondary',
-        'activation_pct': 10,
-      },
+    'muscles': [
+      {'muscle_name': 'Pectoralis Major', 'involvement_type': 'primary', 'activation_percentage': 50},
+      {'muscle_name': 'Anterior Deltoid', 'involvement_type': 'primary', 'activation_percentage': 30},
+      {'muscle_name': 'Triceps Brachii', 'involvement_type': 'secondary', 'activation_percentage': 20}
     ],
-    'machines': [
-      {'machine_id': 'barbell', 'is_required': true},
-      {'machine_id': 'bench', 'is_required': true},
+    'equipment': [
+      {'equipment_name': 'Incline Barbell Bench Press Station', 'is_required': true},
+      {'equipment_name': 'Barbell Rack', 'is_required': true}
     ],
   },
   {
-    'id': 'chest_fly',
-    'exercise_name': 'Chest Fly',
-    'movement_type': 'isolated',
-    'movement_pattern': 'horizontal_adduction',
-    'description': 'Isolation exercise for chest',
+    'id': 'machine_chest_press',
+    'name': 'Machine Chest Press',
+    'movement_type': 'compound',
+    'movement_pattern': 'horizontal push',
+    'description': 'เครื่องเพรสอก เหมาะสำหรับผู้เริ่มต้น',
+    'difficulty_level': 'beginner',
+    'is_compound': true,
+    'muscles': [
+      {'muscle_name': 'Pectoralis Major', 'involvement_type': 'primary', 'activation_percentage': 70},
+      {'muscle_name': 'Anterior Deltoid', 'involvement_type': 'secondary', 'activation_percentage': 15},
+      {'muscle_name': 'Triceps Brachii', 'involvement_type': 'secondary', 'activation_percentage': 15}
+    ],
+    'equipment': [
+      {'equipment_name': 'Chest Press Machine', 'is_required': true}
+    ],
+  },
+  {
+    'id': 'incline_machine_chest_press',
+    'name': 'Incline Machine Chest Press',
+    'movement_type': 'compound',
+    'movement_pattern': 'incline push',
+    'description': 'เครื่องเพรสลาดเอียงสำหรับอกส่วนบน',
+    'difficulty_level': 'beginner',
+    'is_compound': true,
+    'muscles': [
+      {'muscle_name': 'Pectoralis Major', 'involvement_type': 'primary', 'activation_percentage': 55},
+      {'muscle_name': 'Anterior Deltoid', 'involvement_type': 'primary', 'activation_percentage': 25},
+      {'muscle_name': 'Triceps Brachii', 'involvement_type': 'secondary', 'activation_percentage': 20}
+    ],
+    'equipment': [
+      {'equipment_name': 'Incline Chest Press Machine', 'is_required': true}
+    ],
+  },
+  {
+    'id': 'pec_deck_fly',
+    'name': 'Pec Deck Fly',
+    'movement_type': 'isolation',
+    'movement_pattern': 'chest fly',
+    'description': 'เครื่องบินอกสำหรับแยกกล้ามอกชั้นใน',
     'difficulty_level': 'beginner',
     'is_compound': false,
-    'muscle_involvements': [
-      {
-        'muscle_id': 'pectoralis_major',
-        'involvement': 'primary',
-        'activation_pct': 90,
-      },
-      {
-        'muscle_id': 'anterior_deltoid',
-        'involvement': 'stabilizer',
-        'activation_pct': 10,
-      },
+    'muscles': [
+      {'muscle_name': 'Pectoralis Major', 'involvement_type': 'primary', 'activation_percentage': 85},
+      {'muscle_name': 'Pectoralis Minor', 'involvement_type': 'secondary', 'activation_percentage': 15}
     ],
-    'machines': [
-      {'machine_id': 'dumbbells', 'is_required': false},
-      {'machine_id': 'cable_machine', 'is_required': false},
-      {'machine_id': 'pec_fly_machine', 'is_required': false},
+    'equipment': [
+      {'equipment_name': 'Pec Deck Fly', 'is_required': true}
     ],
   },
   {
-    'id': 'push_ups',
-    'exercise_name': 'Push-ups',
+    'id': 'cable_crossover',
+    'name': 'Cable Crossover',
+    'movement_type': 'isolation',
+    'movement_pattern': 'chest fly',
+    'description': 'เคเบิลครอสโอเวอร์สำหรับยืดและหดอกเต็มช่วง',
+    'difficulty_level': 'intermediate',
+    'is_compound': false,
+    'muscles': [
+      {'muscle_name': 'Pectoralis Major', 'involvement_type': 'primary', 'activation_percentage': 80},
+      {'muscle_name': 'Anterior Deltoid', 'involvement_type': 'secondary', 'activation_percentage': 20}
+    ],
+    'equipment': [
+      {'equipment_name': 'Cable Crossover Machine', 'is_required': true}
+    ],
+  },
+  {
+    'id': 'cable_chest_fly',
+    'name': 'Cable Chest Fly',
+    'movement_type': 'isolation',
+    'movement_pattern': 'chest fly',
+    'description': 'เคเบิลฟลายแยกกล้ามอก',
+    'difficulty_level': 'intermediate',
+    'is_compound': false,
+    'muscles': [
+      {'muscle_name': 'Pectoralis Major', 'involvement_type': 'primary', 'activation_percentage': 85},
+      {'muscle_name': 'Anterior Deltoid', 'involvement_type': 'secondary', 'activation_percentage': 15}
+    ],
+    'equipment': [
+      {'equipment_name': 'Cable Chest Fly', 'is_required': true}
+    ],
+  },
+  {
+    'id': 'dumbbell_bench_press',
+    'name': 'Dumbbell Bench Press',
     'movement_type': 'compound',
-    'movement_pattern': 'horizontal_push',
-    'description': 'Bodyweight chest exercise',
+    'movement_pattern': 'horizontal push',
+    'description': 'ดัมเบลเพรสราบเพิ่มช่วงการเคลื่อนไหวของอก',
     'difficulty_level': 'beginner',
     'is_compound': true,
-    'muscle_involvements': [
-      {
-        'muscle_id': 'pectoralis_major',
-        'involvement': 'primary',
-        'activation_pct': 60,
-      },
-      {
-        'muscle_id': 'anterior_deltoid',
-        'involvement': 'secondary',
-        'activation_pct': 20,
-      },
-      {
-        'muscle_id': 'triceps_brachii',
-        'involvement': 'secondary',
-        'activation_pct': 20,
-      },
+    'muscles': [
+      {'muscle_name': 'Pectoralis Major', 'involvement_type': 'primary', 'activation_percentage': 65},
+      {'muscle_name': 'Anterior Deltoid', 'involvement_type': 'secondary', 'activation_percentage': 20},
+      {'muscle_name': 'Triceps Brachii', 'involvement_type': 'secondary', 'activation_percentage': 15}
     ],
-    'machines': [
-      {'machine_id': 'none', 'is_required': true},
-    ],
-  },
-
-  // ── Back ──
-  {
-    'id': 'deadlift',
-    'exercise_name': 'Deadlift',
-    'movement_type': 'compound',
-    'movement_pattern': 'hip_hinge',
-    'description': 'King of compound exercises',
-    'difficulty_level': 'advanced',
-    'is_compound': true,
-    'muscle_involvements': [
-      {
-        'muscle_id': 'erector_spinae',
-        'involvement': 'primary',
-        'activation_pct': 40,
-      },
-      {'muscle_id': 'glutes', 'involvement': 'primary', 'activation_pct': 30},
-      {
-        'muscle_id': 'hamstrings',
-        'involvement': 'primary',
-        'activation_pct': 20,
-      },
-      {
-        'muscle_id': 'trapezius',
-        'involvement': 'secondary',
-        'activation_pct': 10,
-      },
-    ],
-    'machines': [
-      {'machine_id': 'barbell', 'is_required': true},
+    'equipment': [
+      {'equipment_name': 'Bench', 'is_required': true},
+      {'equipment_name': 'Dumbbell Rack', 'is_required': true}
     ],
   },
   {
-    'id': 'barbell_row',
-    'exercise_name': 'Barbell Row',
-    'movement_type': 'compound',
-    'movement_pattern': 'horizontal_pull',
-    'description': 'Compound back thickness builder',
-    'difficulty_level': 'intermediate',
-    'is_compound': true,
-    'muscle_involvements': [
-      {
-        'muscle_id': 'latissimus_dorsi',
-        'involvement': 'primary',
-        'activation_pct': 50,
-      },
-      {
-        'muscle_id': 'rhomboids',
-        'involvement': 'primary',
-        'activation_pct': 25,
-      },
-      {
-        'muscle_id': 'trapezius',
-        'involvement': 'secondary',
-        'activation_pct': 15,
-      },
-      {
-        'muscle_id': 'biceps_brachii',
-        'involvement': 'secondary',
-        'activation_pct': 10,
-      },
+    'id': 'dumbbell_fly',
+    'name': 'Dumbbell Fly',
+    'movement_type': 'isolation',
+    'movement_pattern': 'chest fly',
+    'description': 'ดัมเบลฟลายยืดและแยกกล้ามอก',
+    'difficulty_level': 'beginner',
+    'is_compound': false,
+    'muscles': [
+      {'muscle_name': 'Pectoralis Major', 'involvement_type': 'primary', 'activation_percentage': 85},
+      {'muscle_name': 'Anterior Deltoid', 'involvement_type': 'secondary', 'activation_percentage': 15}
     ],
-    'machines': [
-      {'machine_id': 'barbell', 'is_required': true},
+    'equipment': [
+      {'equipment_name': 'Bench', 'is_required': true},
+      {'equipment_name': 'Dumbbell Rack', 'is_required': true}
     ],
   },
   {
-    'id': 'pull_ups',
-    'exercise_name': 'Pull-ups',
+    'id': 'smith_machine_bench_press',
+    'name': 'Smith Machine Bench Press',
     'movement_type': 'compound',
-    'movement_pattern': 'vertical_pull',
-    'description': 'Bodyweight back exercise',
-    'difficulty_level': 'intermediate',
+    'movement_pattern': 'horizontal push',
+    'description': 'เบนช์เพรสบาร์เบลบน Smith Machine',
+    'difficulty_level': 'beginner',
     'is_compound': true,
-    'muscle_involvements': [
-      {
-        'muscle_id': 'latissimus_dorsi',
-        'involvement': 'primary',
-        'activation_pct': 60,
-      },
-      {
-        'muscle_id': 'biceps_brachii',
-        'involvement': 'secondary',
-        'activation_pct': 25,
-      },
-      {
-        'muscle_id': 'rhomboids',
-        'involvement': 'secondary',
-        'activation_pct': 15,
-      },
+    'muscles': [
+      {'muscle_name': 'Pectoralis Major', 'involvement_type': 'primary', 'activation_percentage': 65},
+      {'muscle_name': 'Anterior Deltoid', 'involvement_type': 'secondary', 'activation_percentage': 20},
+      {'muscle_name': 'Triceps Brachii', 'involvement_type': 'secondary', 'activation_percentage': 15}
     ],
-    'machines': [
-      {'machine_id': 'pullup_bar', 'is_required': true},
+    'equipment': [
+      {'equipment_name': 'Smith Machine', 'is_required': true}
     ],
   },
   {
     'id': 'lat_pulldown',
-    'exercise_name': 'Lat Pulldown',
+    'name': 'Lat Pulldown',
     'movement_type': 'compound',
-    'movement_pattern': 'vertical_pull',
-    'description': 'Machine-based vertical pull',
+    'movement_pattern': 'vertical pull',
+    'description': 'แลทพูลดาวน์ขยายความกว้างของหลัง',
     'difficulty_level': 'beginner',
     'is_compound': true,
-    'muscle_involvements': [
-      {
-        'muscle_id': 'latissimus_dorsi',
-        'involvement': 'primary',
-        'activation_pct': 60,
-      },
-      {
-        'muscle_id': 'biceps_brachii',
-        'involvement': 'secondary',
-        'activation_pct': 25,
-      },
-      {
-        'muscle_id': 'rhomboids',
-        'involvement': 'secondary',
-        'activation_pct': 15,
-      },
+    'muscles': [
+      {'muscle_name': 'Latissimus Dorsi', 'involvement_type': 'primary', 'activation_percentage': 60},
+      {'muscle_name': 'Trapezius', 'involvement_type': 'secondary', 'activation_percentage': 20},
+      {'muscle_name': 'Biceps Brachii', 'involvement_type': 'secondary', 'activation_percentage': 20}
     ],
-    'machines': [
-      {'machine_id': 'lat_pulldown_machine', 'is_required': true},
+    'equipment': [
+      {'equipment_name': 'Lat Pulldown Machine', 'is_required': true}
+    ],
+  },
+  {
+    'id': 'lat_pull',
+    'name': 'Lat Pull',
+    'movement_type': 'compound',
+    'movement_pattern': 'vertical pull',
+    'description': 'เครื่องแลทพูลฝึกความแข็งแกร่งการดึงแนวดิ่ง',
+    'difficulty_level': 'beginner',
+    'is_compound': true,
+    'muscles': [
+      {'muscle_name': 'Latissimus Dorsi', 'involvement_type': 'primary', 'activation_percentage': 60},
+      {'muscle_name': 'Trapezius', 'involvement_type': 'secondary', 'activation_percentage': 20},
+      {'muscle_name': 'Biceps Brachii', 'involvement_type': 'secondary', 'activation_percentage': 20}
+    ],
+    'equipment': [
+      {'equipment_name': 'Lat Pull', 'is_required': true}
+    ],
+  },
+  {
+    'id': 'dual_lat_pulldown',
+    'name': 'Dual Lat Pulldown',
+    'movement_type': 'compound',
+    'movement_pattern': 'vertical pull',
+    'description': 'แลทพูลดาวน์สองมือแยกอิสระเพื่อความสมมาตร',
+    'difficulty_level': 'beginner',
+    'is_compound': true,
+    'muscles': [
+      {'muscle_name': 'Latissimus Dorsi', 'involvement_type': 'primary', 'activation_percentage': 60},
+      {'muscle_name': 'Trapezius', 'involvement_type': 'secondary', 'activation_percentage': 20},
+      {'muscle_name': 'Biceps Brachii', 'involvement_type': 'secondary', 'activation_percentage': 20}
+    ],
+    'equipment': [
+      {'equipment_name': 'Dual Lat Machine', 'is_required': true}
+    ],
+  },
+  {
+    'id': 'seated_cable_row',
+    'name': 'Seated Cable Row',
+    'movement_type': 'compound',
+    'movement_pattern': 'horizontal pull',
+    'description': 'โรว์เคเบิลนั่งเพิ่มความหนาของหลัง',
+    'difficulty_level': 'intermediate',
+    'is_compound': true,
+    'muscles': [
+      {'muscle_name': 'Latissimus Dorsi', 'involvement_type': 'primary', 'activation_percentage': 40},
+      {'muscle_name': 'Rhomboids', 'involvement_type': 'primary', 'activation_percentage': 30},
+      {'muscle_name': 'Trapezius', 'involvement_type': 'secondary', 'activation_percentage': 20},
+      {'muscle_name': 'Biceps Brachii', 'involvement_type': 'secondary', 'activation_percentage': 10}
+    ],
+    'equipment': [
+      {'equipment_name': 'Seated Cable Row', 'is_required': true}
+    ],
+  },
+  {
+    'id': 'machine_row',
+    'name': 'Machine Row',
+    'movement_type': 'compound',
+    'movement_pattern': 'horizontal pull',
+    'description': 'เครื่องโรว์แบบแผ่นน้ำหนักหรือเลือกน้ำหนักได้',
+    'difficulty_level': 'beginner',
+    'is_compound': true,
+    'muscles': [
+      {'muscle_name': 'Latissimus Dorsi', 'involvement_type': 'primary', 'activation_percentage': 40},
+      {'muscle_name': 'Rhomboids', 'involvement_type': 'primary', 'activation_percentage': 30},
+      {'muscle_name': 'Trapezius', 'involvement_type': 'secondary', 'activation_percentage': 20},
+      {'muscle_name': 'Biceps Brachii', 'involvement_type': 'secondary', 'activation_percentage': 10}
+    ],
+    'equipment': [
+      {'equipment_name': 'Row Machine', 'is_required': true}
+    ],
+  },
+  {
+    'id': 'seated_row',
+    'name': 'Seated Row',
+    'movement_type': 'compound',
+    'movement_pattern': 'horizontal pull',
+    'description': 'เครื่องโรว์นั่งพัฒนากล้ามหลัง',
+    'difficulty_level': 'beginner',
+    'is_compound': true,
+    'muscles': [
+      {'muscle_name': 'Latissimus Dorsi', 'involvement_type': 'primary', 'activation_percentage': 40},
+      {'muscle_name': 'Rhomboids', 'involvement_type': 'primary', 'activation_percentage': 30},
+      {'muscle_name': 'Trapezius', 'involvement_type': 'secondary', 'activation_percentage': 20},
+      {'muscle_name': 'Biceps Brachii', 'involvement_type': 'secondary', 'activation_percentage': 10}
+    ],
+    'equipment': [
+      {'equipment_name': 'Seated Row Machine', 'is_required': true}
+    ],
+  },
+  {
+    'id': 'assisted_pull_up',
+    'name': 'Assisted Pull-up',
+    'movement_type': 'compound',
+    'movement_pattern': 'vertical pull',
+    'description': 'พูลอัพช่วยน้ำหนัก เหมาะสำหรับผู้เริ่มต้นสร้างความแข็งแกร่งของหลัง',
+    'difficulty_level': 'beginner',
+    'is_compound': true,
+    'muscles': [
+      {'muscle_name': 'Latissimus Dorsi', 'involvement_type': 'primary', 'activation_percentage': 55},
+      {'muscle_name': 'Trapezius', 'involvement_type': 'secondary', 'activation_percentage': 20},
+      {'muscle_name': 'Biceps Brachii', 'involvement_type': 'secondary', 'activation_percentage': 25}
+    ],
+    'equipment': [
+      {'equipment_name': 'Assisted Pull Up Machine', 'is_required': true}
+    ],
+  },
+  {
+    'id': 'barbell_row',
+    'name': 'Barbell Row',
+    'movement_type': 'compound',
+    'movement_pattern': 'horizontal pull',
+    'description': 'บาร์เบลโรว์โน้มตัวเพิ่มความหนาของหลัง',
+    'difficulty_level': 'intermediate',
+    'is_compound': true,
+    'muscles': [
+      {'muscle_name': 'Latissimus Dorsi', 'involvement_type': 'primary', 'activation_percentage': 40},
+      {'muscle_name': 'Rhomboids', 'involvement_type': 'primary', 'activation_percentage': 30},
+      {'muscle_name': 'Trapezius', 'involvement_type': 'secondary', 'activation_percentage': 20},
+      {'muscle_name': 'Biceps Brachii', 'involvement_type': 'secondary', 'activation_percentage': 10}
+    ],
+    'equipment': [
+      {'equipment_name': 'Barbell Rack', 'is_required': true}
     ],
   },
   {
     'id': 'dumbbell_row',
-    'exercise_name': 'Dumbbell Row',
+    'name': 'Dumbbell Row',
     'movement_type': 'compound',
-    'movement_pattern': 'horizontal_pull',
-    'description': 'Unilateral back exercise',
-    'difficulty_level': 'intermediate',
+    'movement_pattern': 'horizontal pull',
+    'description': 'ดัมเบลโรว์มือเดียวพัฒนากล้ามหลังแต่ละข้าง',
+    'difficulty_level': 'beginner',
     'is_compound': true,
-    'muscle_involvements': [
-      {
-        'muscle_id': 'latissimus_dorsi',
-        'involvement': 'primary',
-        'activation_pct': 55,
-      },
-      {
-        'muscle_id': 'rhomboids',
-        'involvement': 'primary',
-        'activation_pct': 25,
-      },
-      {
-        'muscle_id': 'biceps_brachii',
-        'involvement': 'secondary',
-        'activation_pct': 20,
-      },
+    'muscles': [
+      {'muscle_name': 'Latissimus Dorsi', 'involvement_type': 'primary', 'activation_percentage': 50},
+      {'muscle_name': 'Rhomboids', 'involvement_type': 'secondary', 'activation_percentage': 30},
+      {'muscle_name': 'Biceps Brachii', 'involvement_type': 'secondary', 'activation_percentage': 20}
     ],
-    'machines': [
-      {'machine_id': 'dumbbells', 'is_required': true},
+    'equipment': [
+      {'equipment_name': 'Dumbbell Rack', 'is_required': true},
+      {'equipment_name': 'Bench', 'is_required': false}
     ],
   },
-
-  // ── Shoulders ──
   {
-    'id': 'overhead_press',
-    'exercise_name': 'Overhead Press',
+    'id': 'back_extension',
+    'name': 'Back Extension',
+    'movement_type': 'isolation',
+    'movement_pattern': 'spinal extension',
+    'description': 'แบ็คเอ็กซ์เทนชันบน Roman Chair เสริมหลังล่างและก้น',
+    'difficulty_level': 'beginner',
+    'is_compound': false,
+    'muscles': [
+      {'muscle_name': 'Erector Spinae', 'involvement_type': 'primary', 'activation_percentage': 80},
+      {'muscle_name': 'Glutes', 'involvement_type': 'secondary', 'activation_percentage': 20}
+    ],
+    'equipment': [
+      {'equipment_name': 'Roman Chair', 'is_required': true}
+    ],
+  },
+  {
+    'id': 'machine_overhead_press',
+    'name': 'Machine Overhead Press',
     'movement_type': 'compound',
-    'movement_pattern': 'vertical_push',
-    'description': 'Compound shoulder press',
+    'movement_pattern': 'vertical push',
+    'description': 'เครื่องเพรสไหล่แบบนำทาง',
+    'difficulty_level': 'beginner',
+    'is_compound': true,
+    'muscles': [
+      {'muscle_name': 'Anterior Deltoid', 'involvement_type': 'primary', 'activation_percentage': 45},
+      {'muscle_name': 'Lateral Deltoid', 'involvement_type': 'primary', 'activation_percentage': 30},
+      {'muscle_name': 'Triceps Brachii', 'involvement_type': 'secondary', 'activation_percentage': 25}
+    ],
+    'equipment': [
+      {'equipment_name': 'Shoulder Press Machine', 'is_required': true}
+    ],
+  },
+  {
+    'id': 'seated_machine_shoulder_press',
+    'name': 'Seated Machine Shoulder Press',
+    'movement_type': 'compound',
+    'movement_pattern': 'vertical push',
+    'description': 'เครื่องเพรสไหล่นั่งควบคุมการยกเหนือศีรษะ',
+    'difficulty_level': 'beginner',
+    'is_compound': true,
+    'muscles': [
+      {'muscle_name': 'Anterior Deltoid', 'involvement_type': 'primary', 'activation_percentage': 45},
+      {'muscle_name': 'Lateral Deltoid', 'involvement_type': 'primary', 'activation_percentage': 30},
+      {'muscle_name': 'Triceps Brachii', 'involvement_type': 'secondary', 'activation_percentage': 25}
+    ],
+    'equipment': [
+      {'equipment_name': 'Seated Shoulder Press', 'is_required': true}
+    ],
+  },
+  {
+    'id': 'machine_lateral_raise',
+    'name': 'Machine Lateral Raise',
+    'movement_type': 'isolation',
+    'movement_pattern': 'shoulder abduction',
+    'description': 'เครื่องยกข้างแยกกล้ามเดลทอยด์ด้านข้าง',
+    'difficulty_level': 'beginner',
+    'is_compound': false,
+    'muscles': [
+      {'muscle_name': 'Lateral Deltoid', 'involvement_type': 'primary', 'activation_percentage': 85},
+      {'muscle_name': 'Anterior Deltoid', 'involvement_type': 'secondary', 'activation_percentage': 15}
+    ],
+    'equipment': [
+      {'equipment_name': 'Lateral Raise Machine', 'is_required': true}
+    ],
+  },
+  {
+    'id': 'barbell_overhead_press',
+    'name': 'Barbell Overhead Press',
+    'movement_type': 'compound',
+    'movement_pattern': 'vertical push',
+    'description': 'บาร์เบลเพรสยืนเสริมความแข็งแกร่งไหล่และลำตัวบน',
     'difficulty_level': 'intermediate',
     'is_compound': true,
-    'muscle_involvements': [
-      {
-        'muscle_id': 'anterior_deltoid',
-        'involvement': 'primary',
-        'activation_pct': 50,
-      },
-      {
-        'muscle_id': 'lateral_deltoid',
-        'involvement': 'primary',
-        'activation_pct': 30,
-      },
-      {
-        'muscle_id': 'triceps_brachii',
-        'involvement': 'secondary',
-        'activation_pct': 20,
-      },
+    'muscles': [
+      {'muscle_name': 'Anterior Deltoid', 'involvement_type': 'primary', 'activation_percentage': 45},
+      {'muscle_name': 'Lateral Deltoid', 'involvement_type': 'primary', 'activation_percentage': 25},
+      {'muscle_name': 'Triceps Brachii', 'involvement_type': 'secondary', 'activation_percentage': 20},
+      {'muscle_name': 'Trapezius', 'involvement_type': 'stabilizer', 'activation_percentage': 10}
     ],
-    'machines': [
-      {'machine_id': 'barbell', 'is_required': true},
+    'equipment': [
+      {'equipment_name': 'Squat Rack', 'is_required': true},
+      {'equipment_name': 'Barbell Rack', 'is_required': true}
     ],
   },
   {
     'id': 'dumbbell_shoulder_press',
-    'exercise_name': 'Dumbbell Shoulder Press',
+    'name': 'Dumbbell Shoulder Press',
     'movement_type': 'compound',
-    'movement_pattern': 'vertical_push',
-    'description': 'Dumbbell overhead press',
-    'difficulty_level': 'intermediate',
+    'movement_pattern': 'vertical push',
+    'description': 'ดัมเบลเพรสไหล่แบบนั่งหรือยืน',
+    'difficulty_level': 'beginner',
     'is_compound': true,
-    'muscle_involvements': [
-      {
-        'muscle_id': 'anterior_deltoid',
-        'involvement': 'primary',
-        'activation_pct': 50,
-      },
-      {
-        'muscle_id': 'lateral_deltoid',
-        'involvement': 'primary',
-        'activation_pct': 30,
-      },
-      {
-        'muscle_id': 'triceps_brachii',
-        'involvement': 'secondary',
-        'activation_pct': 20,
-      },
+    'muscles': [
+      {'muscle_name': 'Anterior Deltoid', 'involvement_type': 'primary', 'activation_percentage': 40},
+      {'muscle_name': 'Lateral Deltoid', 'involvement_type': 'primary', 'activation_percentage': 30},
+      {'muscle_name': 'Triceps Brachii', 'involvement_type': 'secondary', 'activation_percentage': 30}
     ],
-    'machines': [
-      {'machine_id': 'dumbbells', 'is_required': true},
+    'equipment': [
+      {'equipment_name': 'Dumbbell Rack', 'is_required': true}
     ],
   },
   {
-    'id': 'lateral_raise',
-    'exercise_name': 'Lateral Raise',
-    'movement_type': 'isolated',
-    'movement_pattern': 'abduction',
-    'description': 'Isolation for lateral delts',
+    'id': 'dumbbell_lateral_raise',
+    'name': 'Dumbbell Lateral Raise',
+    'movement_type': 'isolation',
+    'movement_pattern': 'shoulder abduction',
+    'description': 'ดัมเบลยกข้างเพิ่มความกว้างไหล่',
     'difficulty_level': 'beginner',
     'is_compound': false,
-    'muscle_involvements': [
-      {
-        'muscle_id': 'lateral_deltoid',
-        'involvement': 'primary',
-        'activation_pct': 90,
-      },
-      {
-        'muscle_id': 'anterior_deltoid',
-        'involvement': 'stabilizer',
-        'activation_pct': 10,
-      },
+    'muscles': [
+      {'muscle_name': 'Lateral Deltoid', 'involvement_type': 'primary', 'activation_percentage': 80},
+      {'muscle_name': 'Anterior Deltoid', 'involvement_type': 'secondary', 'activation_percentage': 20}
     ],
-    'machines': [
-      {'machine_id': 'dumbbells', 'is_required': true},
+    'equipment': [
+      {'equipment_name': 'Dumbbell Rack', 'is_required': true}
     ],
   },
   {
-    'id': 'front_raise',
-    'exercise_name': 'Front Raise',
-    'movement_type': 'isolated',
-    'movement_pattern': 'flexion',
-    'description': 'Isolation for anterior delts',
+    'id': 'dumbbell_front_raise',
+    'name': 'Dumbbell Front Raise',
+    'movement_type': 'isolation',
+    'movement_pattern': 'shoulder flexion',
+    'description': 'ดัมเบลยกหน้าเน้นกล้ามเดลทอยด์ด้านหน้า',
     'difficulty_level': 'beginner',
     'is_compound': false,
-    'muscle_involvements': [
-      {
-        'muscle_id': 'anterior_deltoid',
-        'involvement': 'primary',
-        'activation_pct': 90,
-      },
-      {
-        'muscle_id': 'lateral_deltoid',
-        'involvement': 'stabilizer',
-        'activation_pct': 10,
-      },
+    'muscles': [
+      {'muscle_name': 'Anterior Deltoid', 'involvement_type': 'primary', 'activation_percentage': 80},
+      {'muscle_name': 'Lateral Deltoid', 'involvement_type': 'secondary', 'activation_percentage': 20}
     ],
-    'machines': [
-      {'machine_id': 'dumbbells', 'is_required': true},
+    'equipment': [
+      {'equipment_name': 'Dumbbell Rack', 'is_required': true}
     ],
   },
-
-  // ── Arms ──
   {
-    'id': 'barbell_curl',
-    'exercise_name': 'Barbell Curl',
-    'movement_type': 'isolated',
-    'movement_pattern': 'elbow_flexion',
-    'description': 'Classic bicep exercise',
+    'id': 'preacher_curl',
+    'name': 'Preacher Curl',
+    'movement_type': 'isolation',
+    'movement_pattern': 'elbow flexion',
+    'description': 'เครื่อง Preacher Curl เน้นการหดตัวสูงสุดของไบเซ็ป',
     'difficulty_level': 'beginner',
     'is_compound': false,
-    'muscle_involvements': [
-      {
-        'muscle_id': 'biceps_brachii',
-        'involvement': 'primary',
-        'activation_pct': 80,
-      },
-      {
-        'muscle_id': 'brachialis',
-        'involvement': 'secondary',
-        'activation_pct': 20,
-      },
+    'muscles': [
+      {'muscle_name': 'Biceps Brachii', 'involvement_type': 'primary', 'activation_percentage': 85},
+      {'muscle_name': 'Brachialis', 'involvement_type': 'secondary', 'activation_percentage': 15}
     ],
-    'machines': [
-      {'machine_id': 'barbell', 'is_required': false},
-      {'machine_id': 'ez_curl_bar', 'is_required': false},
+    'equipment': [
+      {'equipment_name': 'Preacher Curl Machine', 'is_required': true}
+    ],
+  },
+  {
+    'id': 'cable_bicep_curl',
+    'name': 'Cable Bicep Curl',
+    'movement_type': 'isolation',
+    'movement_pattern': 'elbow flexion',
+    'description': 'เคเบิลเคิร์ลออกแรงคงที่ต่อไบเซ็ป',
+    'difficulty_level': 'beginner',
+    'is_compound': false,
+    'muscles': [
+      {'muscle_name': 'Biceps Brachii', 'involvement_type': 'primary', 'activation_percentage': 80},
+      {'muscle_name': 'Brachialis', 'involvement_type': 'secondary', 'activation_percentage': 20}
+    ],
+    'equipment': [
+      {'equipment_name': 'Cable Crossover Machine', 'is_required': true}
+    ],
+  },
+  {
+    'id': 'ez_bar_curl',
+    'name': 'EZ Bar Curl',
+    'movement_type': 'isolation',
+    'movement_pattern': 'elbow flexion',
+    'description': 'เคิร์ลด้วย EZ Bar ลดแรงกดที่ข้อมือ',
+    'difficulty_level': 'beginner',
+    'is_compound': false,
+    'muscles': [
+      {'muscle_name': 'Biceps Brachii', 'involvement_type': 'primary', 'activation_percentage': 75},
+      {'muscle_name': 'Brachialis', 'involvement_type': 'secondary', 'activation_percentage': 20},
+      {'muscle_name': 'Forearm Flexors', 'involvement_type': 'stabilizer', 'activation_percentage': 5}
+    ],
+    'equipment': [
+      {'equipment_name': 'EZ Curl Bar Rack', 'is_required': true}
     ],
   },
   {
     'id': 'dumbbell_curl',
-    'exercise_name': 'Dumbbell Curl',
-    'movement_type': 'isolated',
-    'movement_pattern': 'elbow_flexion',
-    'description': 'Unilateral bicep curl',
+    'name': 'Dumbbell Curl',
+    'movement_type': 'isolation',
+    'movement_pattern': 'elbow flexion',
+    'description': 'ดัมเบลเคิร์ลพัฒนาไบเซ็ปแต่ละข้าง',
     'difficulty_level': 'beginner',
     'is_compound': false,
-    'muscle_involvements': [
-      {
-        'muscle_id': 'biceps_brachii',
-        'involvement': 'primary',
-        'activation_pct': 80,
-      },
-      {
-        'muscle_id': 'brachialis',
-        'involvement': 'secondary',
-        'activation_pct': 20,
-      },
+    'muscles': [
+      {'muscle_name': 'Biceps Brachii', 'involvement_type': 'primary', 'activation_percentage': 80},
+      {'muscle_name': 'Brachialis', 'involvement_type': 'secondary', 'activation_percentage': 15},
+      {'muscle_name': 'Forearm Flexors', 'involvement_type': 'stabilizer', 'activation_percentage': 5}
     ],
-    'machines': [
-      {'machine_id': 'dumbbells', 'is_required': true},
+    'equipment': [
+      {'equipment_name': 'Dumbbell Rack', 'is_required': true}
     ],
   },
   {
-    'id': 'tricep_pushdown',
-    'exercise_name': 'Tricep Pushdown',
-    'movement_type': 'isolated',
-    'movement_pattern': 'elbow_extension',
-    'description': 'Cable tricep isolation',
+    'id': 'barbell_curl',
+    'name': 'Barbell Curl',
+    'movement_type': 'isolation',
+    'movement_pattern': 'elbow flexion',
+    'description': 'บาร์เบลเคิร์ลเพิ่มมวลไบเซ็ปทั้งสองข้าง',
     'difficulty_level': 'beginner',
     'is_compound': false,
-    'muscle_involvements': [
-      {
-        'muscle_id': 'triceps_brachii',
-        'involvement': 'primary',
-        'activation_pct': 100,
-      },
+    'muscles': [
+      {'muscle_name': 'Biceps Brachii', 'involvement_type': 'primary', 'activation_percentage': 80},
+      {'muscle_name': 'Brachialis', 'involvement_type': 'secondary', 'activation_percentage': 15},
+      {'muscle_name': 'Forearm Flexors', 'involvement_type': 'stabilizer', 'activation_percentage': 5}
     ],
-    'machines': [
-      {'machine_id': 'cable_machine', 'is_required': true},
+    'equipment': [
+      {'equipment_name': 'Barbell Rack', 'is_required': true}
     ],
   },
   {
-    'id': 'skull_crushers',
-    'exercise_name': 'Skull Crushers',
-    'movement_type': 'isolated',
-    'movement_pattern': 'elbow_extension',
-    'description': 'Lying tricep extension',
-    'difficulty_level': 'intermediate',
+    'id': 'machine_tricep_extension',
+    'name': 'Machine Tricep Extension',
+    'movement_type': 'isolation',
+    'movement_pattern': 'elbow extension',
+    'description': 'เครื่องเอ็กซ์เทนชันไทรเซ็ปแบบนำทาง',
+    'difficulty_level': 'beginner',
     'is_compound': false,
-    'muscle_involvements': [
-      {
-        'muscle_id': 'triceps_brachii',
-        'involvement': 'primary',
-        'activation_pct': 100,
-      },
+    'muscles': [
+      {'muscle_name': 'Triceps Brachii', 'involvement_type': 'primary', 'activation_percentage': 90},
+      {'muscle_name': 'Forearm Extensors', 'involvement_type': 'stabilizer', 'activation_percentage': 10}
     ],
-    'machines': [
-      {'machine_id': 'barbell', 'is_required': false},
-      {'machine_id': 'ez_curl_bar', 'is_required': false},
+    'equipment': [
+      {'equipment_name': 'Tricep Extension Machine', 'is_required': true}
     ],
   },
   {
-    'id': 'dips',
-    'exercise_name': 'Dips',
+    'id': 'seated_triceps_press',
+    'name': 'Seated Triceps Press',
+    'movement_type': 'isolation',
+    'movement_pattern': 'elbow extension',
+    'description': 'เครื่องเพรสไทรเซ็ปนั่งเน้นการยืดเหนือศีรษะ',
+    'difficulty_level': 'beginner',
+    'is_compound': false,
+    'muscles': [
+      {'muscle_name': 'Triceps Brachii', 'involvement_type': 'primary', 'activation_percentage': 90},
+      {'muscle_name': 'Forearm Extensors', 'involvement_type': 'stabilizer', 'activation_percentage': 10}
+    ],
+    'equipment': [
+      {'equipment_name': 'Seated Triceps Press', 'is_required': true}
+    ],
+  },
+  {
+    'id': 'cable_tricep_pushdown',
+    'name': 'Cable Tricep Pushdown',
+    'movement_type': 'isolation',
+    'movement_pattern': 'elbow extension',
+    'description': 'เคเบิลพุชดาวน์แยกกล้ามไทรเซ็ปด้วยแรงคงที่',
+    'difficulty_level': 'beginner',
+    'is_compound': false,
+    'muscles': [
+      {'muscle_name': 'Triceps Brachii', 'involvement_type': 'primary', 'activation_percentage': 85},
+      {'muscle_name': 'Forearm Extensors', 'involvement_type': 'stabilizer', 'activation_percentage': 15}
+    ],
+    'equipment': [
+      {'equipment_name': 'Cable Crossover Machine', 'is_required': true}
+    ],
+  },
+  {
+    'id': 'assisted_dip',
+    'name': 'Assisted Dip',
     'movement_type': 'compound',
-    'movement_pattern': 'vertical_push',
-    'description': 'Compound tricep and chest exercise',
-    'difficulty_level': 'intermediate',
+    'movement_pattern': 'vertical push',
+    'description': 'ดิปช่วยน้ำหนักพัฒนาไทรเซ็ปและอก',
+    'difficulty_level': 'beginner',
     'is_compound': true,
-    'muscle_involvements': [
-      {
-        'muscle_id': 'triceps_brachii',
-        'involvement': 'primary',
-        'activation_pct': 50,
-      },
-      {
-        'muscle_id': 'pectoralis_major',
-        'involvement': 'primary',
-        'activation_pct': 30,
-      },
-      {
-        'muscle_id': 'anterior_deltoid',
-        'involvement': 'secondary',
-        'activation_pct': 20,
-      },
+    'muscles': [
+      {'muscle_name': 'Triceps Brachii', 'involvement_type': 'primary', 'activation_percentage': 55},
+      {'muscle_name': 'Pectoralis Major', 'involvement_type': 'secondary', 'activation_percentage': 25},
+      {'muscle_name': 'Anterior Deltoid', 'involvement_type': 'secondary', 'activation_percentage': 20}
     ],
-    'machines': [
-      {'machine_id': 'dip_station', 'is_required': true},
+    'equipment': [
+      {'equipment_name': 'Assisted Pull Up Machine', 'is_required': true}
     ],
   },
-
-  // ── Legs ──
+  {
+    'id': 'skull_crusher',
+    'name': 'Skull Crusher',
+    'movement_type': 'isolation',
+    'movement_pattern': 'elbow extension',
+    'description': 'Skull Crusher ด้วย EZ Bar เพิ่มมวลไทรเซ็ป',
+    'difficulty_level': 'intermediate',
+    'is_compound': false,
+    'muscles': [
+      {'muscle_name': 'Triceps Brachii', 'involvement_type': 'primary', 'activation_percentage': 90},
+      {'muscle_name': 'Forearm Extensors', 'involvement_type': 'stabilizer', 'activation_percentage': 10}
+    ],
+    'equipment': [
+      {'equipment_name': 'EZ Curl Bar Rack', 'is_required': true},
+      {'equipment_name': 'Bench', 'is_required': true}
+    ],
+  },
+  {
+    'id': 'dumbbell_tricep_kickback',
+    'name': 'Dumbbell Tricep Kickback',
+    'movement_type': 'isolation',
+    'movement_pattern': 'elbow extension',
+    'description': 'ดัมเบลคิกแบ็กเน้นการหดตัวสูงสุดของไทรเซ็ป',
+    'difficulty_level': 'beginner',
+    'is_compound': false,
+    'muscles': [
+      {'muscle_name': 'Triceps Brachii', 'involvement_type': 'primary', 'activation_percentage': 90},
+      {'muscle_name': 'Forearm Extensors', 'involvement_type': 'stabilizer', 'activation_percentage': 10}
+    ],
+    'equipment': [
+      {'equipment_name': 'Dumbbell Rack', 'is_required': true},
+      {'equipment_name': 'Bench', 'is_required': false}
+    ],
+  },
   {
     'id': 'barbell_squat',
-    'exercise_name': 'Barbell Squat',
+    'name': 'Barbell Squat',
     'movement_type': 'compound',
     'movement_pattern': 'squat',
-    'description': 'King of leg exercises',
+    'description': 'สควอตบาร์เบลท่าพื้นฐานเสริมความแข็งแกร่งขาและลำตัวล่าง',
     'difficulty_level': 'intermediate',
     'is_compound': true,
-    'muscle_involvements': [
-      {
-        'muscle_id': 'quadriceps',
-        'involvement': 'primary',
-        'activation_pct': 50,
-      },
-      {'muscle_id': 'glutes', 'involvement': 'primary', 'activation_pct': 30},
-      {
-        'muscle_id': 'hamstrings',
-        'involvement': 'secondary',
-        'activation_pct': 20,
-      },
+    'muscles': [
+      {'muscle_name': 'Quadriceps', 'involvement_type': 'primary', 'activation_percentage': 45},
+      {'muscle_name': 'Glutes', 'involvement_type': 'primary', 'activation_percentage': 35},
+      {'muscle_name': 'Hamstrings', 'involvement_type': 'secondary', 'activation_percentage': 15},
+      {'muscle_name': 'Erector Spinae', 'involvement_type': 'stabilizer', 'activation_percentage': 5}
     ],
-    'machines': [
-      {'machine_id': 'barbell', 'is_required': true},
+    'equipment': [
+      {'equipment_name': 'Squat Rack', 'is_required': true},
+      {'equipment_name': 'Barbell Rack', 'is_required': true}
+    ],
+  },
+  {
+    'id': 'smith_machine_squat',
+    'name': 'Smith Machine Squat',
+    'movement_type': 'compound',
+    'movement_pattern': 'squat',
+    'description': 'สควอตบน Smith Machine ควบคุมการเคลื่อนไหวได้ดี',
+    'difficulty_level': 'beginner',
+    'is_compound': true,
+    'muscles': [
+      {'muscle_name': 'Quadriceps', 'involvement_type': 'primary', 'activation_percentage': 50},
+      {'muscle_name': 'Glutes', 'involvement_type': 'primary', 'activation_percentage': 30},
+      {'muscle_name': 'Hamstrings', 'involvement_type': 'secondary', 'activation_percentage': 20}
+    ],
+    'equipment': [
+      {'equipment_name': 'Smith Machine', 'is_required': true}
     ],
   },
   {
     'id': 'leg_press',
-    'exercise_name': 'Leg Press',
+    'name': 'Leg Press',
     'movement_type': 'compound',
-    'movement_pattern': 'leg_press',
-    'description': 'Machine-based leg compound',
+    'movement_pattern': 'squat',
+    'description': 'เลกเพรสนั่งพัฒนาต้นขาและก้น',
     'difficulty_level': 'beginner',
     'is_compound': true,
-    'muscle_involvements': [
-      {
-        'muscle_id': 'quadriceps',
-        'involvement': 'primary',
-        'activation_pct': 55,
-      },
-      {'muscle_id': 'glutes', 'involvement': 'primary', 'activation_pct': 30},
-      {
-        'muscle_id': 'hamstrings',
-        'involvement': 'secondary',
-        'activation_pct': 15,
-      },
+    'muscles': [
+      {'muscle_name': 'Quadriceps', 'involvement_type': 'primary', 'activation_percentage': 55},
+      {'muscle_name': 'Glutes', 'involvement_type': 'primary', 'activation_percentage': 30},
+      {'muscle_name': 'Hamstrings', 'involvement_type': 'secondary', 'activation_percentage': 15}
     ],
-    'machines': [
-      {'machine_id': 'leg_press_machine', 'is_required': true},
+    'equipment': [
+      {'equipment_name': 'Seated Leg Press Machine', 'is_required': true}
     ],
   },
   {
-    'id': 'romanian_deadlift',
-    'exercise_name': 'Romanian Deadlift',
+    'id': 'v_squat',
+    'name': 'V Squat',
     'movement_type': 'compound',
-    'movement_pattern': 'hip_hinge',
-    'description': 'Hamstring-focused deadlift variation',
-    'difficulty_level': 'intermediate',
+    'movement_pattern': 'squat',
+    'description': 'เครื่อง V Squat เน้นกล้ามต้นขาด้านหน้า',
+    'difficulty_level': 'beginner',
     'is_compound': true,
-    'muscle_involvements': [
-      {
-        'muscle_id': 'hamstrings',
-        'involvement': 'primary',
-        'activation_pct': 60,
-      },
-      {'muscle_id': 'glutes', 'involvement': 'primary', 'activation_pct': 30},
-      {
-        'muscle_id': 'erector_spinae',
-        'involvement': 'secondary',
-        'activation_pct': 10,
-      },
+    'muscles': [
+      {'muscle_name': 'Quadriceps', 'involvement_type': 'primary', 'activation_percentage': 60},
+      {'muscle_name': 'Glutes', 'involvement_type': 'primary', 'activation_percentage': 25},
+      {'muscle_name': 'Hamstrings', 'involvement_type': 'secondary', 'activation_percentage': 15}
     ],
-    'machines': [
-      {'machine_id': 'barbell', 'is_required': true},
+    'equipment': [
+      {'equipment_name': 'V Squat Machine', 'is_required': true}
     ],
   },
   {
     'id': 'leg_extension',
-    'exercise_name': 'Leg Extension',
-    'movement_type': 'isolated',
-    'movement_pattern': 'knee_extension',
-    'description': 'Quadriceps isolation',
+    'name': 'Leg Extension',
+    'movement_type': 'isolation',
+    'movement_pattern': 'knee extension',
+    'description': 'เครื่องเลกเอ็กซ์เทนชันแยกกล้ามต้นขาด้านหน้า',
     'difficulty_level': 'beginner',
     'is_compound': false,
-    'muscle_involvements': [
-      {
-        'muscle_id': 'quadriceps',
-        'involvement': 'primary',
-        'activation_pct': 100,
-      },
+    'muscles': [
+      {'muscle_name': 'Quadriceps', 'involvement_type': 'primary', 'activation_percentage': 100}
     ],
-    'machines': [
-      {'machine_id': 'leg_extension_machine', 'is_required': true},
+    'equipment': [
+      {'equipment_name': 'Leg Extension Machine', 'is_required': true}
     ],
   },
   {
     'id': 'leg_curl',
-    'exercise_name': 'Leg Curl',
-    'movement_type': 'isolated',
-    'movement_pattern': 'knee_flexion',
-    'description': 'Hamstring isolation',
+    'name': 'Leg Curl',
+    'movement_type': 'isolation',
+    'movement_pattern': 'knee flexion',
+    'description': 'เครื่องเลกเคิร์ลแยกกล้ามต้นขาด้านหลัง',
     'difficulty_level': 'beginner',
     'is_compound': false,
-    'muscle_involvements': [
-      {
-        'muscle_id': 'hamstrings',
-        'involvement': 'primary',
-        'activation_pct': 100,
-      },
+    'muscles': [
+      {'muscle_name': 'Hamstrings', 'involvement_type': 'primary', 'activation_percentage': 90},
+      {'muscle_name': 'Calves', 'involvement_type': 'secondary', 'activation_percentage': 10}
     ],
-    'machines': [
-      {'machine_id': 'leg_curl_machine', 'is_required': true},
+    'equipment': [
+      {'equipment_name': 'Leg Curl Machine', 'is_required': true}
     ],
   },
   {
-    'id': 'calf_raise',
-    'exercise_name': 'Calf Raise',
-    'movement_type': 'isolated',
-    'movement_pattern': 'plantarflexion',
-    'description': 'Calf isolation exercise',
+    'id': 'lying_leg_curl',
+    'name': 'Lying Leg Curl',
+    'movement_type': 'isolation',
+    'movement_pattern': 'knee flexion',
+    'description': 'เลกเคิร์ลนอนคว่ำเน้นกล้ามต้นขาด้านหลัง',
     'difficulty_level': 'beginner',
     'is_compound': false,
-    'muscle_involvements': [
-      {'muscle_id': 'calves', 'involvement': 'primary', 'activation_pct': 100},
+    'muscles': [
+      {'muscle_name': 'Hamstrings', 'involvement_type': 'primary', 'activation_percentage': 90},
+      {'muscle_name': 'Calves', 'involvement_type': 'secondary', 'activation_percentage': 10}
     ],
-    'machines': [
-      {'machine_id': 'none', 'is_required': true},
-    ],
-  },
-
-  // ── Core ──
-  {
-    'id': 'plank',
-    'exercise_name': 'Plank',
-    'movement_type': 'isolated',
-    'movement_pattern': 'isometric',
-    'description': 'Core stability exercise',
-    'difficulty_level': 'beginner',
-    'is_compound': false,
-    'muscle_involvements': [
-      {
-        'muscle_id': 'rectus_abdominis',
-        'involvement': 'primary',
-        'activation_pct': 50,
-      },
-      {
-        'muscle_id': 'transverse_abdominis',
-        'involvement': 'primary',
-        'activation_pct': 30,
-      },
-      {
-        'muscle_id': 'obliques',
-        'involvement': 'stabilizer',
-        'activation_pct': 20,
-      },
-    ],
-    'machines': [
-      {'machine_id': 'none', 'is_required': true},
+    'equipment': [
+      {'equipment_name': 'Lying Leg Curl Machine', 'is_required': true}
     ],
   },
   {
-    'id': 'crunches',
-    'exercise_name': 'Crunches',
-    'movement_type': 'isolated',
-    'movement_pattern': 'spinal_flexion',
-    'description': 'Basic abdominal exercise',
+    'id': 'seated_leg_curl',
+    'name': 'Seated Leg Curl',
+    'movement_type': 'isolation',
+    'movement_pattern': 'knee flexion',
+    'description': 'เลกเคิร์ลนั่งเน้นกล้ามต้นขาด้านหลัง',
     'difficulty_level': 'beginner',
     'is_compound': false,
-    'muscle_involvements': [
-      {
-        'muscle_id': 'rectus_abdominis',
-        'involvement': 'primary',
-        'activation_pct': 90,
-      },
-      {
-        'muscle_id': 'obliques',
-        'involvement': 'secondary',
-        'activation_pct': 10,
-      },
+    'muscles': [
+      {'muscle_name': 'Hamstrings', 'involvement_type': 'primary', 'activation_percentage': 90},
+      {'muscle_name': 'Calves', 'involvement_type': 'secondary', 'activation_percentage': 10}
     ],
-    'machines': [
-      {'machine_id': 'none', 'is_required': true},
+    'equipment': [
+      {'equipment_name': 'Seated Leg Curl Machine', 'is_required': true}
     ],
   },
   {
-    'id': 'russian_twists',
-    'exercise_name': 'Russian Twists',
-    'movement_type': 'isolated',
-    'movement_pattern': 'rotation',
-    'description': 'Oblique targeting exercise',
+    'id': 'standing_leg_curl',
+    'name': 'Standing Leg Curl',
+    'movement_type': 'isolation',
+    'movement_pattern': 'knee flexion',
+    'description': 'เลกเคิร์ลยืนขาเดียวฝึกแต่ละข้างแยกกัน',
     'difficulty_level': 'beginner',
     'is_compound': false,
-    'muscle_involvements': [
-      {'muscle_id': 'obliques', 'involvement': 'primary', 'activation_pct': 70},
-      {
-        'muscle_id': 'rectus_abdominis',
-        'involvement': 'secondary',
-        'activation_pct': 30,
-      },
+    'muscles': [
+      {'muscle_name': 'Hamstrings', 'involvement_type': 'primary', 'activation_percentage': 90},
+      {'muscle_name': 'Calves', 'involvement_type': 'secondary', 'activation_percentage': 10}
     ],
-    'machines': [
-      {'machine_id': 'none', 'is_required': true},
+    'equipment': [
+      {'equipment_name': 'Standing Leg Curl Machine', 'is_required': true}
     ],
   },
+  {
+    'id': 'hip_abduction',
+    'name': 'Hip Abduction',
+    'movement_type': 'isolation',
+    'movement_pattern': 'hip abduction',
+    'description': 'เครื่องอะบักชันสะโพกแยกกล้ามก้นและสะโพกด้านนอก',
+    'difficulty_level': 'beginner',
+    'is_compound': false,
+    'muscles': [
+      {'muscle_name': 'Glutes', 'involvement_type': 'primary', 'activation_percentage': 80},
+      {'muscle_name': 'Adductors', 'involvement_type': 'secondary', 'activation_percentage': 20}
+    ],
+    'equipment': [
+      {'equipment_name': 'Hip Abductor Machine', 'is_required': true}
+    ],
+  },
+  {
+    'id': 'hip_adduction',
+    'name': 'Hip Adduction',
+    'movement_type': 'isolation',
+    'movement_pattern': 'hip adduction',
+    'description': 'เครื่องแอดดักชันสะโพกแยกกล้ามต้นขาด้านใน',
+    'difficulty_level': 'beginner',
+    'is_compound': false,
+    'muscles': [
+      {'muscle_name': 'Adductors', 'involvement_type': 'primary', 'activation_percentage': 90},
+      {'muscle_name': 'Glutes', 'involvement_type': 'secondary', 'activation_percentage': 10}
+    ],
+    'equipment': [
+      {'equipment_name': 'Hip Adductor Machine', 'is_required': true}
+    ],
+  },
+  {
+    'id': 'seated_calf_raise',
+    'name': 'Seated Calf Raise',
+    'movement_type': 'isolation',
+    'movement_pattern': 'plantar flexion',
+    'description': 'เคาฟเรซนั่งเน้นกล้ามโซเลอุส',
+    'difficulty_level': 'beginner',
+    'is_compound': false,
+    'muscles': [
+      {'muscle_name': 'Calves', 'involvement_type': 'primary', 'activation_percentage': 100}
+    ],
+    'equipment': [
+      {'equipment_name': 'Seated Calf Press Machine', 'is_required': true}
+    ],
+  },
+  {
+    'id': 'deadlift',
+    'name': 'Deadlift',
+    'movement_type': 'compound',
+    'movement_pattern': 'hip hinge',
+    'description': 'เดดลิฟต์บาร์เบลท่าคลาสสิกเสริมกล้ามด้านหลังทั้งหมด',
+    'difficulty_level': 'advanced',
+    'is_compound': true,
+    'muscles': [
+      {'muscle_name': 'Erector Spinae', 'involvement_type': 'primary', 'activation_percentage': 30},
+      {'muscle_name': 'Glutes', 'involvement_type': 'primary', 'activation_percentage': 30},
+      {'muscle_name': 'Hamstrings', 'involvement_type': 'primary', 'activation_percentage': 25},
+      {'muscle_name': 'Trapezius', 'involvement_type': 'secondary', 'activation_percentage': 15}
+    ],
+    'equipment': [
+      {'equipment_name': 'Barbell Rack', 'is_required': true},
+      {'equipment_name': 'Olympic Lifting Platform', 'is_required': false}
+    ],
+  },
+  {
+    'id': 'romanian_deadlift',
+    'name': 'Romanian Deadlift',
+    'movement_type': 'compound',
+    'movement_pattern': 'hip hinge',
+    'description': 'RDL เน้น hamstrings และ glutes โดยเหยียดหลังตรงตลอด',
+    'difficulty_level': 'intermediate',
+    'is_compound': true,
+    'muscles': [
+      {'muscle_name': 'Hamstrings', 'involvement_type': 'primary', 'activation_percentage': 50},
+      {'muscle_name': 'Glutes', 'involvement_type': 'primary', 'activation_percentage': 30},
+      {'muscle_name': 'Erector Spinae', 'involvement_type': 'secondary', 'activation_percentage': 20},
+    ],
+    'equipment': [
+      {'equipment_name': 'Barbell Rack', 'is_required': true},
+    ],
+  },
+  {
+    'id': 'power_clean',
+    'name': 'Power Clean',
+    'movement_type': 'compound',
+    'movement_pattern': 'olympic lift',
+    'description': 'เพาเวอร์คลีนบาร์เบลระเบิดพลังทั้งร่างกาย',
+    'difficulty_level': 'advanced',
+    'is_compound': true,
+    'muscles': [
+      {'muscle_name': 'Glutes', 'involvement_type': 'primary', 'activation_percentage': 30},
+      {'muscle_name': 'Quadriceps', 'involvement_type': 'primary', 'activation_percentage': 25},
+      {'muscle_name': 'Hamstrings', 'involvement_type': 'secondary', 'activation_percentage': 20},
+      {'muscle_name': 'Trapezius', 'involvement_type': 'secondary', 'activation_percentage': 15},
+      {'muscle_name': 'Erector Spinae', 'involvement_type': 'secondary', 'activation_percentage': 10}
+    ],
+    'equipment': [
+      {'equipment_name': 'Olympic Lifting Platform', 'is_required': true},
+      {'equipment_name': 'Barbell Rack', 'is_required': true}
+    ],
+  },
+  {
+    'id': 'snatch',
+    'name': 'Snatch',
+    'movement_type': 'compound',
+    'movement_pattern': 'olympic lift',
+    'description': 'สแนชแบบโอลิมปิกพัฒนาความแข็งแกร่งระเบิดทั้งร่าง',
+    'difficulty_level': 'advanced',
+    'is_compound': true,
+    'muscles': [
+      {'muscle_name': 'Glutes', 'involvement_type': 'primary', 'activation_percentage': 25},
+      {'muscle_name': 'Quadriceps', 'involvement_type': 'primary', 'activation_percentage': 25},
+      {'muscle_name': 'Hamstrings', 'involvement_type': 'secondary', 'activation_percentage': 20},
+      {'muscle_name': 'Trapezius', 'involvement_type': 'secondary', 'activation_percentage': 20},
+      {'muscle_name': 'Erector Spinae', 'involvement_type': 'secondary', 'activation_percentage': 10}
+    ],
+    'equipment': [
+      {'equipment_name': 'Olympic Lifting Platform', 'is_required': true},
+      {'equipment_name': 'Barbell Rack', 'is_required': true}
+    ],
+  },
+  {
+    'id': 'hanging_leg_raise',
+    'name': 'Hanging Leg Raise',
+    'movement_type': 'isolation',
+    'movement_pattern': 'hip flexion',
+    'description': 'ยกขาค้างบน Captain Chair เสริมกล้ามท้องส่วนล่าง',
+    'difficulty_level': 'intermediate',
+    'is_compound': false,
+    'muscles': [
+      {'muscle_name': 'Rectus Abdominis', 'involvement_type': 'primary', 'activation_percentage': 55},
+      {'muscle_name': 'Transverse Abdominis', 'involvement_type': 'primary', 'activation_percentage': 25},
+      {'muscle_name': 'Obliques', 'involvement_type': 'secondary', 'activation_percentage': 20}
+    ],
+    'equipment': [
+      {'equipment_name': 'Captain Chair Abs Station', 'is_required': true}
+    ],
+  },
+  {
+    'id': 'knee_tuck',
+    'name': 'Knee Tuck',
+    'movement_type': 'isolation',
+    'movement_pattern': 'hip flexion',
+    'description': 'ดึงเข่าบน Captain Chair ฝึก Core สำหรับผู้เริ่มต้น',
+    'difficulty_level': 'beginner',
+    'is_compound': false,
+    'muscles': [
+      {'muscle_name': 'Rectus Abdominis', 'involvement_type': 'primary', 'activation_percentage': 60},
+      {'muscle_name': 'Transverse Abdominis', 'involvement_type': 'secondary', 'activation_percentage': 25},
+      {'muscle_name': 'Obliques', 'involvement_type': 'secondary', 'activation_percentage': 15}
+    ],
+    'equipment': [
+      {'equipment_name': 'Captain Chair Abs Station', 'is_required': true}
+    ],
+  },
+  {
+    'id': 'machine_crunch',
+    'name': 'Machine Crunch',
+    'movement_type': 'isolation',
+    'movement_pattern': 'trunk flexion',
+    'description': 'เครื่องครันช์นั่งแยกกล้ามท้อง',
+    'difficulty_level': 'beginner',
+    'is_compound': false,
+    'muscles': [
+      {'muscle_name': 'Rectus Abdominis', 'involvement_type': 'primary', 'activation_percentage': 85},
+      {'muscle_name': 'Obliques', 'involvement_type': 'secondary', 'activation_percentage': 15}
+    ],
+    'equipment': [
+      {'equipment_name': 'Seated Crunch Machine', 'is_required': true}
+    ],
+  },
+  {
+    'id': 'roman_chair_sit_up',
+    'name': 'Roman Chair Sit-up',
+    'movement_type': 'isolation',
+    'movement_pattern': 'trunk flexion',
+    'description': 'ซิทอัปบน Roman Chair ในช่วงการเคลื่อนไหวเต็ม',
+    'difficulty_level': 'intermediate',
+    'is_compound': false,
+    'muscles': [
+      {'muscle_name': 'Rectus Abdominis', 'involvement_type': 'primary', 'activation_percentage': 80},
+      {'muscle_name': 'Obliques', 'involvement_type': 'secondary', 'activation_percentage': 20}
+    ],
+    'equipment': [
+      {'equipment_name': 'Roman Chair', 'is_required': true}
+    ],
+  },
+  {
+    'id': 'manual_treadmill_run',
+    'name': 'Manual Treadmill Run',
+    'movement_type': 'compound',
+    'movement_pattern': 'cardio',
+    'description': 'วิ่งบนลู่วิ่งเคิร์ฟแบบแมนวลสำหรับคาร์ดิโอความเข้มสูง',
+    'difficulty_level': 'intermediate',
+    'is_compound': true,
+    'muscles': [
+      {'muscle_name': 'Quadriceps', 'involvement_type': 'primary', 'activation_percentage': 30},
+      {'muscle_name': 'Hamstrings', 'involvement_type': 'primary', 'activation_percentage': 30},
+      {'muscle_name': 'Calves', 'involvement_type': 'primary', 'activation_percentage': 25},
+      {'muscle_name': 'Glutes', 'involvement_type': 'secondary', 'activation_percentage': 15}
+    ],
+    'equipment': [
+      {'equipment_name': 'Curve Treadmill', 'is_required': true}
+    ],
+  },
+  {
+    'id': 'rowing',
+    'name': 'Rowing',
+    'movement_type': 'compound',
+    'movement_pattern': 'cardio',
+    'description': 'พายเรือในร่มฝึกคาร์ดิโอและความอดทนทั้งร่างกาย',
+    'difficulty_level': 'beginner',
+    'is_compound': true,
+    'muscles': [
+      {'muscle_name': 'Latissimus Dorsi', 'involvement_type': 'primary', 'activation_percentage': 25},
+      {'muscle_name': 'Rhomboids', 'involvement_type': 'secondary', 'activation_percentage': 20},
+      {'muscle_name': 'Quadriceps', 'involvement_type': 'secondary', 'activation_percentage': 20},
+      {'muscle_name': 'Hamstrings', 'involvement_type': 'secondary', 'activation_percentage': 20},
+      {'muscle_name': 'Erector Spinae', 'involvement_type': 'stabilizer', 'activation_percentage': 15}
+    ],
+    'equipment': [
+      {'equipment_name': 'Rowing Machine', 'is_required': true}
+    ],
+  }
 ];
 
 // ═══════════════════════════════════════════════════════════
@@ -1167,8 +1999,6 @@ Future<void> seedPrograms(FirebaseFirestore db) async {
     'days_per_week': 6,
     'difficulty_level': 'intermediate',
     'description': '6-day split focusing on muscle hypertrophy',
-    'is_template': false,
-    'is_active': true,
     'created_at': FieldValue.serverTimestamp(),
   });
 
@@ -1182,7 +2012,7 @@ Future<void> seedPrograms(FirebaseFirestore db) async {
     'notes': 'Focus on chest and shoulders',
     'exercises': [
       {
-        'exercise_id': 'barbell_bench_press',
+        'exercise_id': 'flat_barbell_bench_press',
         'sets': 4,
         'reps': 8,
         'weight': 185.0,
@@ -1198,7 +2028,7 @@ Future<void> seedPrograms(FirebaseFirestore db) async {
         'order': 2,
       },
       {
-        'exercise_id': 'overhead_press',
+        'exercise_id': 'barbell_overhead_press',
         'sets': 4,
         'reps': 8,
         'weight': 95.0,
@@ -1206,7 +2036,7 @@ Future<void> seedPrograms(FirebaseFirestore db) async {
         'order': 3,
       },
       {
-        'exercise_id': 'lateral_raise',
+        'exercise_id': 'dumbbell_lateral_raise',
         'sets': 3,
         'reps': 12,
         'weight': 30.0,
@@ -1214,7 +2044,7 @@ Future<void> seedPrograms(FirebaseFirestore db) async {
         'order': 4,
       },
       {
-        'exercise_id': 'tricep_pushdown',
+        'exercise_id': 'cable_tricep_pushdown',
         'sets': 3,
         'reps': 12,
         'weight': 50.0,
@@ -1239,7 +2069,7 @@ Future<void> seedPrograms(FirebaseFirestore db) async {
         'order': 1,
       },
       {
-        'exercise_id': 'pull_ups',
+        'exercise_id': 'assisted_pull_up',
         'sets': 4,
         'reps': 8,
         'weight': null,
@@ -1312,7 +2142,7 @@ Future<void> seedPrograms(FirebaseFirestore db) async {
         'order': 4,
       },
       {
-        'exercise_id': 'calf_raise',
+        'exercise_id': 'seated_calf_raise',
         'sets': 4,
         'reps': 20,
         'weight': null,
@@ -1322,30 +2152,445 @@ Future<void> seedPrograms(FirebaseFirestore db) async {
     ],
   });
 
+  // PPL: Push Day B
+  await pplSessions.doc('push_day_b').set({
+    'session_name': 'Push Day B',
+    'workout_split': 'Push',
+    'day_number': 4,
+    'notes': 'Chest and triceps volume day',
+    'exercises': [
+      {
+        'exercise_id': 'incline_machine_chest_press',
+        'sets': 4,
+        'reps': 10,
+        'weight': 120.0,
+        'rest_seconds': 120,
+        'order': 1,
+      },
+      {
+        'exercise_id': 'pec_deck_fly',
+        'sets': 3,
+        'reps': 12,
+        'weight': 80.0,
+        'rest_seconds': 90,
+        'order': 2,
+      },
+      {
+        'exercise_id': 'dumbbell_shoulder_press',
+        'sets': 3,
+        'reps': 12,
+        'weight': 40.0,
+        'rest_seconds': 90,
+        'order': 3,
+      },
+      {
+        'exercise_id': 'dumbbell_lateral_raise',
+        'sets': 4,
+        'reps': 15,
+        'weight': 20.0,
+        'rest_seconds': 60,
+        'order': 4,
+      },
+      {
+        'exercise_id': 'skull_crusher',
+        'sets': 3,
+        'reps': 12,
+        'weight': 60.0,
+        'rest_seconds': 60,
+        'order': 5,
+      },
+    ],
+  });
+
+  // PPL: Pull Day B
+  await pplSessions.doc('pull_day_b').set({
+    'session_name': 'Pull Day B',
+    'workout_split': 'Pull',
+    'day_number': 5,
+    'notes': 'Back and biceps volume day',
+    'exercises': [
+      {
+        'exercise_id': 'lat_pulldown',
+        'sets': 4,
+        'reps': 10,
+        'weight': 100.0,
+        'rest_seconds': 120,
+        'order': 1,
+      },
+      {
+        'exercise_id': 'seated_cable_row',
+        'sets': 4,
+        'reps': 10,
+        'weight': 110.0,
+        'rest_seconds': 120,
+        'order': 2,
+      },
+      {
+        'exercise_id': 'machine_row',
+        'sets': 3,
+        'reps': 12,
+        'weight': 90.0,
+        'rest_seconds': 90,
+        'order': 3,
+      },
+      {
+        'exercise_id': 'dumbbell_curl',
+        'sets': 3,
+        'reps': 12,
+        'weight': 30.0,
+        'rest_seconds': 60,
+        'order': 4,
+      },
+      {
+        'exercise_id': 'preacher_curl',
+        'sets': 3,
+        'reps': 12,
+        'weight': 50.0,
+        'rest_seconds': 60,
+        'order': 5,
+      },
+    ],
+  });
+
+  // PPL: Leg Day B
+  await pplSessions.doc('leg_day_b').set({
+    'session_name': 'Leg Day B',
+    'workout_split': 'Legs',
+    'day_number': 6,
+    'notes': 'Hamstring and glute focus',
+    'exercises': [
+      {
+        'exercise_id': 'smith_machine_squat',
+        'sets': 4,
+        'reps': 10,
+        'weight': 155.0,
+        'rest_seconds': 180,
+        'order': 1,
+      },
+      {
+        'exercise_id': 'lying_leg_curl',
+        'sets': 4,
+        'reps': 12,
+        'weight': 80.0,
+        'rest_seconds': 90,
+        'order': 2,
+      },
+      {
+        'exercise_id': 'leg_extension',
+        'sets': 3,
+        'reps': 15,
+        'weight': 85.0,
+        'rest_seconds': 60,
+        'order': 3,
+      },
+      {
+        'exercise_id': 'hip_abduction',
+        'sets': 3,
+        'reps': 15,
+        'weight': 70.0,
+        'rest_seconds': 60,
+        'order': 4,
+      },
+      {
+        'exercise_id': 'seated_calf_raise',
+        'sets': 4,
+        'reps': 20,
+        'weight': 90.0,
+        'rest_seconds': 45,
+        'order': 5,
+      },
+    ],
+  });
+
   // Program 2: Strength Building
-  await db.collection('programs').doc('strength_building').set({
+  final sbRef = db.collection('programs').doc('strength_building');
+  await sbRef.set({
     'program_name': 'Strength Building Program',
     'goal': 'strength',
     'duration_weeks': 8,
     'days_per_week': 4,
     'difficulty_level': 'advanced',
     'description': 'Low-rep compound-focused strength program',
-    'is_template': false,
-    'is_active': false,
     'created_at': FieldValue.serverTimestamp(),
   });
 
-  // Program 3: Beginner Template
-  await db.collection('programs').doc('beginner_full_body').set({
+  final sbSessions = sbRef.collection('sessions');
+
+  await sbSessions.doc('upper_power').set({
+    'session_name': 'Upper Power',
+    'workout_split': 'Upper',
+    'day_number': 1,
+    'notes': 'Heavy compound pressing and rowing',
+    'exercises': [
+      {
+        'exercise_id': 'flat_barbell_bench_press',
+        'sets': 4,
+        'reps': 5,
+        'weight': 205.0,
+        'rest_seconds': 240,
+        'order': 1,
+      },
+      {
+        'exercise_id': 'barbell_overhead_press',
+        'sets': 3,
+        'reps': 5,
+        'weight': 115.0,
+        'rest_seconds': 180,
+        'order': 2,
+      },
+      {
+        'exercise_id': 'barbell_row',
+        'sets': 4,
+        'reps': 5,
+        'weight': 155.0,
+        'rest_seconds': 180,
+        'order': 3,
+      },
+      {
+        'exercise_id': 'assisted_pull_up',
+        'sets': 3,
+        'reps': 6,
+        'weight': null,
+        'rest_seconds': 150,
+        'order': 4,
+      },
+    ],
+  });
+
+  await sbSessions.doc('lower_power').set({
+    'session_name': 'Lower Power',
+    'workout_split': 'Lower',
+    'day_number': 2,
+    'notes': 'Heavy squat and deadlift day',
+    'exercises': [
+      {
+        'exercise_id': 'barbell_squat',
+        'sets': 4,
+        'reps': 5,
+        'weight': 225.0,
+        'rest_seconds': 300,
+        'order': 1,
+      },
+      {
+        'exercise_id': 'deadlift',
+        'sets': 3,
+        'reps': 3,
+        'weight': 275.0,
+        'rest_seconds': 300,
+        'order': 2,
+      },
+      {
+        'exercise_id': 'leg_press',
+        'sets': 3,
+        'reps': 6,
+        'weight': 270.0,
+        'rest_seconds': 180,
+        'order': 3,
+      },
+    ],
+  });
+
+  await sbSessions.doc('upper_hypertrophy').set({
+    'session_name': 'Upper Hypertrophy',
+    'workout_split': 'Upper',
+    'day_number': 4,
+    'notes': 'Higher rep upper body accessories',
+    'exercises': [
+      {
+        'exercise_id': 'incline_barbell_bench_press',
+        'sets': 4,
+        'reps': 10,
+        'weight': 155.0,
+        'rest_seconds': 120,
+        'order': 1,
+      },
+      {
+        'exercise_id': 'dumbbell_shoulder_press',
+        'sets': 3,
+        'reps': 12,
+        'weight': 45.0,
+        'rest_seconds': 90,
+        'order': 2,
+      },
+      {
+        'exercise_id': 'cable_tricep_pushdown',
+        'sets': 3,
+        'reps': 12,
+        'weight': 55.0,
+        'rest_seconds': 60,
+        'order': 3,
+      },
+      {
+        'exercise_id': 'barbell_curl',
+        'sets': 3,
+        'reps': 12,
+        'weight': 55.0,
+        'rest_seconds': 60,
+        'order': 4,
+      },
+      {
+        'exercise_id': 'dumbbell_lateral_raise',
+        'sets': 3,
+        'reps': 15,
+        'weight': 20.0,
+        'rest_seconds': 60,
+        'order': 5,
+      },
+    ],
+  });
+
+  await sbSessions.doc('lower_hypertrophy').set({
+    'session_name': 'Lower Hypertrophy',
+    'workout_split': 'Lower',
+    'day_number': 5,
+    'notes': 'Quad and hamstring isolation work',
+    'exercises': [
+      {
+        'exercise_id': 'leg_press',
+        'sets': 4,
+        'reps': 12,
+        'weight': 230.0,
+        'rest_seconds': 120,
+        'order': 1,
+      },
+      {
+        'exercise_id': 'leg_extension',
+        'sets': 3,
+        'reps': 15,
+        'weight': 100.0,
+        'rest_seconds': 60,
+        'order': 2,
+      },
+      {
+        'exercise_id': 'lying_leg_curl',
+        'sets': 3,
+        'reps': 12,
+        'weight': 80.0,
+        'rest_seconds': 60,
+        'order': 3,
+      },
+      {
+        'exercise_id': 'seated_calf_raise',
+        'sets': 4,
+        'reps': 20,
+        'weight': 90.0,
+        'rest_seconds': 45,
+        'order': 4,
+      },
+    ],
+  });
+
+  // Program 3: Beginner Full Body
+  final bfbRef = db.collection('programs').doc('beginner_full_body');
+  await bfbRef.set({
     'program_name': 'Beginner Full Body Template',
     'goal': 'general_fitness',
     'duration_weeks': 4,
     'days_per_week': 3,
     'difficulty_level': 'beginner',
     'description': '3-day full body workout for beginners',
-    'is_template': true,
-    'is_active': false,
     'created_at': FieldValue.serverTimestamp(),
+  });
+
+  final bfbSessions = bfbRef.collection('sessions');
+
+  await bfbSessions.doc('full_body_a').set({
+    'session_name': 'Full Body Workout A',
+    'workout_split': 'Full Body',
+    'day_number': 1,
+    'notes': 'Squat, bench, row — add weight each session',
+    'exercises': [
+      {
+        'exercise_id': 'barbell_squat',
+        'sets': 3,
+        'reps': 5,
+        'weight': 95.0,
+        'rest_seconds': 180,
+        'order': 1,
+      },
+      {
+        'exercise_id': 'flat_barbell_bench_press',
+        'sets': 3,
+        'reps': 5,
+        'weight': 95.0,
+        'rest_seconds': 180,
+        'order': 2,
+      },
+      {
+        'exercise_id': 'barbell_row',
+        'sets': 3,
+        'reps': 5,
+        'weight': 95.0,
+        'rest_seconds': 180,
+        'order': 3,
+      },
+    ],
+  });
+
+  await bfbSessions.doc('full_body_b').set({
+    'session_name': 'Full Body Workout B',
+    'workout_split': 'Full Body',
+    'day_number': 3,
+    'notes': 'Squat, overhead press, deadlift',
+    'exercises': [
+      {
+        'exercise_id': 'barbell_squat',
+        'sets': 3,
+        'reps': 5,
+        'weight': 95.0,
+        'rest_seconds': 180,
+        'order': 1,
+      },
+      {
+        'exercise_id': 'barbell_overhead_press',
+        'sets': 3,
+        'reps': 5,
+        'weight': 65.0,
+        'rest_seconds': 180,
+        'order': 2,
+      },
+      {
+        'exercise_id': 'deadlift',
+        'sets': 1,
+        'reps': 5,
+        'weight': 135.0,
+        'rest_seconds': 240,
+        'order': 3,
+      },
+    ],
+  });
+
+  await bfbSessions.doc('full_body_c').set({
+    'session_name': 'Full Body Workout C',
+    'workout_split': 'Full Body',
+    'day_number': 5,
+    'notes': 'Repeat A with heavier weights',
+    'exercises': [
+      {
+        'exercise_id': 'barbell_squat',
+        'sets': 3,
+        'reps': 5,
+        'weight': 100.0,
+        'rest_seconds': 180,
+        'order': 1,
+      },
+      {
+        'exercise_id': 'flat_barbell_bench_press',
+        'sets': 3,
+        'reps': 5,
+        'weight': 100.0,
+        'rest_seconds': 180,
+        'order': 2,
+      },
+      {
+        'exercise_id': 'barbell_row',
+        'sets': 3,
+        'reps': 5,
+        'weight': 100.0,
+        'rest_seconds': 180,
+        'order': 3,
+      },
+    ],
   });
 
   debugPrint('Seeded programs (3) with sessions');

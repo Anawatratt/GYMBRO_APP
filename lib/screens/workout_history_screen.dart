@@ -1,16 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 class WorkoutHistoryScreen extends StatelessWidget {
   const WorkoutHistoryScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
+    final uid = FirebaseAuth.instance.currentUser?.uid ?? '';
     return Scaffold(
       appBar: AppBar(title: const Text('Workout History')),
       body: StreamBuilder<QuerySnapshot>(
         stream: FirebaseFirestore.instance
             .collection('workout_history')
+            .where('user_id', isEqualTo: uid)
             .orderBy('completed_at', descending: true)
             .snapshots(),
         builder: (context, snapshot) {
@@ -103,7 +106,7 @@ class _HistoryCardState extends State<_HistoryCard> {
             Row(
               children: [
                 Icon(Icons.check_circle,
-                    color: const Color(0xFF4CAF50), size: 24),
+                    color: const Color(0xFFE53935), size: 24),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(

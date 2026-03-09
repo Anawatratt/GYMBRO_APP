@@ -1,65 +1,81 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../app_state.dart';
 import '../mock_data.dart';
 
 class NotesScreen extends ConsumerWidget {
-  const NotesScreen({super.key});
+  /// If [viewUid] is set, shows notes in read-only mode for that user.
+  final String? viewUid;
+  const NotesScreen({super.key, this.viewUid});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final state = ref.watch(appStateProvider);
-    final trainee = state.currentTrainee;
-    final notes = state.currentNotes;
+    final uid = viewUid ?? FirebaseAuth.instance.currentUser?.uid ?? '';
+    final readOnly = viewUid != null;
+    final notesAsync = ref.watch(notesProvider(uid));
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('Notes'),
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(20),
-          child: Padding(
-            padding: const EdgeInsets.only(left: 16, bottom: 8),
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: Text(
-                "${trainee.name}'s Notes",
-                style: TextStyle(color: Colors.grey[500], fontSize: 14),
-              ),
-            ),
-          ),
-        ),
-      ),
-      body: notes.isEmpty
-          ? _EmptyState(onAdd: () => _showNoteSheet(context, ref))
-          : Padding(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-              child: GridView.builder(
-                itemCount: notes.length,
-                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 2,
-                  crossAxisSpacing: 12,
-                  mainAxisSpacing: 12,
-                  childAspectRatio: 0.85,
+        actions: readOnly
+            ? null
+            : [
+                IconButton(
+                  icon: const Icon(Icons.people_outline),
+                  tooltip: 'Friends',
+                  onPressed: () => _showFriendsSheet(context),
                 ),
-                itemBuilder: (context, i) {
-                  final note = notes[i];
-                  return _NoteCard(
-                    note: note,
-                    onTap: () => _showNoteSheet(context, ref, note: note),
-                    onLongPress: () => _confirmDelete(context, ref, note.id),
-                  );
-                },
-              ),
-            ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () => _showNoteSheet(context, ref),
-        backgroundColor: const Color(0xFF3F51B5),
-        child: const Icon(Icons.add, color: Colors.white),
+              ],
       ),
+      body: notesAsync.when(
+        loading: () => const Center(child: CircularProgressIndicator()),
+        error: (e, _) => Center(child: Text('Error: $e')),
+        data: (notes) => notes.isEmpty
+            ? _EmptyState(
+                onAdd: readOnly ? null : () => _showNoteSheet(context, ref, uid))
+            : Padding(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                child: GridView.builder(
+                  itemCount: notes.length,
+                  gridDelegate:
+                      const SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: 2,
+                    crossAxisSpacing: 12,
+                    mainAxisSpacing: 12,
+                    childAspectRatio: 0.85,
+                  ),
+                  itemBuilder: (context, i) {
+                    final note = notes[i];
+                    return _NoteCard(
+                      note: note,
+                      onTap: readOnly
+                          ? () {}
+                          : () => _showNoteSheet(context, ref, uid,
+                              note: note),
+                      onLongPress: readOnly
+                          ? () {}
+                          : () =>
+                              _confirmDelete(context, ref, uid, note.id),
+                    );
+                  },
+                ),
+              ),
+      ),
+      floatingActionButton: readOnly
+          ? null
+          : FloatingActionButton(
+              onPressed: () =>
+                  _showNoteSheet(context, ref, uid),
+              backgroundColor: const Color(0xFFE53935),
+              child: const Icon(Icons.add, color: Colors.white),
+            ),
     );
   }
 
-  void _confirmDelete(BuildContext context, WidgetRef ref, String noteId) {
+  void _confirmDelete(
+      BuildContext context, WidgetRef ref, String uid, String noteId) {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -72,7 +88,7 @@ class NotesScreen extends ConsumerWidget {
           ),
           TextButton(
             onPressed: () {
-              ref.read(appStateProvider.notifier).deleteNote(noteId);
+              deleteNoteFs(uid, noteId);
               Navigator.pop(ctx);
             },
             child: const Text('Delete', style: TextStyle(color: Colors.red)),
@@ -82,23 +98,35 @@ class NotesScreen extends ConsumerWidget {
     );
   }
 
-  void _showNoteSheet(BuildContext context, WidgetRef ref, {Note? note}) {
+  void _showNoteSheet(BuildContext context, WidgetRef ref, String uid,
+      {Note? note}) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      builder: (ctx) => _NoteEditorSheet(note: note, ref: ref),
+      builder: (ctx) => _NoteEditorSheet(note: note, uid: uid),
+    );
+  }
+
+  void _showFriendsSheet(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => const _FriendsSheet(),
     );
   }
 }
 
-// ── Empty state ─────────────────────────────────────────
+// ── Empty state ──────────────────────────────────────────
 
 class _EmptyState extends StatelessWidget {
-  final VoidCallback onAdd;
-  const _EmptyState({required this.onAdd});
+  final VoidCallback? onAdd;
+  const _EmptyState({this.onAdd});
 
   @override
   Widget build(BuildContext context) {
@@ -106,8 +134,7 @@ class _EmptyState extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.sticky_note_2_outlined,
-              size: 64, color: Colors.grey[300]),
+          Icon(Icons.sticky_note_2_outlined, size: 64, color: Colors.grey[300]),
           const SizedBox(height: 16),
           Text('No notes yet',
               style: TextStyle(
@@ -115,26 +142,24 @@ class _EmptyState extends StatelessWidget {
                   fontWeight: FontWeight.w600,
                   color: Colors.grey[500])),
           const SizedBox(height: 8),
-          Text('Tap + to add your first note',
-              style: TextStyle(color: Colors.grey[400], fontSize: 14)),
+          if (onAdd != null)
+            Text('Tap + to add your first note',
+                style: TextStyle(color: Colors.grey[400], fontSize: 14)),
         ],
       ),
     );
   }
 }
 
-// ── Note card (post-it style) ───────────────────────────
+// ── Note card ────────────────────────────────────────────
 
 class _NoteCard extends StatelessWidget {
   final Note note;
   final VoidCallback onTap;
   final VoidCallback onLongPress;
 
-  const _NoteCard({
-    required this.note,
-    required this.onTap,
-    required this.onLongPress,
-  });
+  const _NoteCard(
+      {required this.note, required this.onTap, required this.onLongPress});
 
   @override
   Widget build(BuildContext context) {
@@ -176,13 +201,13 @@ class _NoteCard extends StatelessWidget {
   }
 }
 
-// ── Note editor bottom sheet ────────────────────────────
+// ── Note editor sheet ────────────────────────────────────
 
 class _NoteEditorSheet extends StatefulWidget {
   final Note? note;
-  final WidgetRef ref;
+  final String uid;
 
-  const _NoteEditorSheet({this.note, required this.ref});
+  const _NoteEditorSheet({this.note, required this.uid});
 
   @override
   State<_NoteEditorSheet> createState() => _NoteEditorSheetState();
@@ -192,6 +217,7 @@ class _NoteEditorSheetState extends State<_NoteEditorSheet> {
   late final TextEditingController _titleCtrl;
   late final TextEditingController _bodyCtrl;
   late Color _selectedColor;
+  bool _saving = false;
   bool get _isEditing => widget.note != null;
 
   @override
@@ -220,8 +246,8 @@ class _NoteEditorSheetState extends State<_NoteEditorSheet> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Text(_isEditing ? 'Edit Note' : 'New Note',
-              style: const TextStyle(
-                  fontSize: 18, fontWeight: FontWeight.w700)),
+              style:
+                  const TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
           const SizedBox(height: 16),
           TextField(
             controller: _titleCtrl,
@@ -245,7 +271,6 @@ class _NoteEditorSheetState extends State<_NoteEditorSheet> {
             maxLines: 5,
           ),
           const SizedBox(height: 14),
-          // Color picker
           Row(
             children: noteColors
                 .map((c) => Padding(
@@ -266,34 +291,227 @@ class _NoteEditorSheetState extends State<_NoteEditorSheet> {
           ),
           const SizedBox(height: 18),
           ElevatedButton(
-            onPressed: _save,
-            child: Text(_isEditing ? 'Update' : 'Save Note'),
+            onPressed: _saving ? null : _save,
+            child: _saving
+                ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(
+                        color: Colors.white, strokeWidth: 2))
+                : Text(_isEditing ? 'Update' : 'Save Note'),
           ),
         ],
       ),
     );
   }
 
-  void _save() {
+  Future<void> _save() async {
     final title = _titleCtrl.text.trim();
     final body = _bodyCtrl.text.trim();
     if (title.isEmpty && body.isEmpty) return;
 
-    final notifier = widget.ref.read(appStateProvider.notifier);
+    setState(() => _saving = true);
 
     if (_isEditing) {
-      notifier.updateNote(widget.note!.id,
+      await updateNoteFs(widget.uid, widget.note!.id,
           title: title, body: body, color: _selectedColor);
     } else {
-      notifier.addNote(Note(
+      final note = Note(
         id: DateTime.now().millisecondsSinceEpoch.toString(),
         title: title.isEmpty ? 'Untitled' : title,
         body: body,
         color: _selectedColor,
         createdAt: DateTime.now(),
-      ));
+      );
+      await addNoteFs(widget.uid, note);
     }
 
-    Navigator.pop(context);
+    if (mounted) Navigator.pop(context);
+  }
+}
+
+// ── Friends sheet ────────────────────────────────────────
+
+class _FriendsSheet extends ConsumerStatefulWidget {
+  const _FriendsSheet();
+
+  @override
+  ConsumerState<_FriendsSheet> createState() => _FriendsSheetState();
+}
+
+class _FriendsSheetState extends ConsumerState<_FriendsSheet> {
+  final _searchCtrl = TextEditingController();
+  String? _message;
+  bool _messageIsError = false;
+  bool _loading = false;
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _addFriend() async {
+    final username = _searchCtrl.text.trim();
+    if (username.isEmpty) return;
+
+    setState(() {
+      _loading = true;
+      _message = null;
+    });
+
+    final error =
+        await ref.read(authNotifierProvider.notifier).addFriend(username);
+
+    if (!mounted) return;
+    setState(() {
+      _loading = false;
+      _messageIsError = error != null;
+      _message = error ?? 'Friend added!';
+    });
+
+    if (error == null) _searchCtrl.clear();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final friends = ref.watch(userProfileProvider).value?.friends ?? [];
+    final bottomInset = MediaQuery.of(context).viewInsets.bottom;
+
+    return Padding(
+      padding: EdgeInsets.fromLTRB(20, 20, 20, 20 + bottomInset),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const Text('Friends',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+          const SizedBox(height: 16),
+
+          // Add friend row
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _searchCtrl,
+                  textInputAction: TextInputAction.search,
+                  onSubmitted: (_) => _addFriend(),
+                  decoration: InputDecoration(
+                    hintText: 'Enter username',
+                    prefixIcon: const Icon(Icons.person_search_outlined),
+                    filled: true,
+                    fillColor: Colors.grey[100],
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide.none,
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 14, vertical: 12),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              SizedBox(
+                height: 48,
+                child: ElevatedButton(
+                  onPressed: _loading ? null : _addFriend,
+                  child: _loading
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(
+                              color: Colors.white, strokeWidth: 2),
+                        )
+                      : const Text('Add'),
+                ),
+              ),
+            ],
+          ),
+
+          if (_message != null) ...[
+            const SizedBox(height: 8),
+            Text(
+              _message!,
+              style: TextStyle(
+                color:
+                    _messageIsError ? Colors.red[400] : Colors.green[700],
+                fontSize: 13,
+              ),
+            ),
+          ],
+
+          const SizedBox(height: 20),
+
+          if (friends.isEmpty)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 16),
+              child: Text('No friends yet',
+                  style:
+                      TextStyle(color: Colors.grey[400], fontSize: 14)),
+            )
+          else ...[
+            Text(
+              '${friends.length} friend${friends.length == 1 ? '' : 's'}',
+              style: TextStyle(
+                  fontSize: 13,
+                  color: Colors.grey[600],
+                  fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 8),
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxHeight: 240),
+              child: ListView.builder(
+                shrinkWrap: true,
+                itemCount: friends.length,
+                itemBuilder: (ctx, i) => _FriendTile(uid: friends[i]),
+              ),
+            ),
+            const SizedBox(height: 8),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+// ── Friend tile (tappable → friend profile) ──────────────
+
+class _FriendTile extends StatelessWidget {
+  final String uid;
+  const _FriendTile({required this.uid});
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<DocumentSnapshot>(
+      future: FirebaseFirestore.instance.collection('users').doc(uid).get(),
+      builder: (context, snapshot) {
+        final data = snapshot.data?.data() as Map<String, dynamic>?;
+        final name = data?['name'] as String? ?? uid;
+        final username = data?['username'] as String? ?? '';
+        final initials = name.isNotEmpty ? name[0].toUpperCase() : '?';
+
+        return ListTile(
+          contentPadding: EdgeInsets.zero,
+          leading: CircleAvatar(
+            backgroundColor: const Color(0xFFE53935),
+            child: Text(initials,
+                style: const TextStyle(
+                    color: Colors.white, fontWeight: FontWeight.w600)),
+          ),
+          title: Text(name,
+              style: const TextStyle(fontWeight: FontWeight.w600)),
+          subtitle: username.isNotEmpty ? Text('@$username') : null,
+          trailing: const Icon(Icons.chevron_right, color: Colors.grey),
+          onTap: () {
+            Navigator.pop(context); // close the sheet
+            Navigator.pushNamed(
+              context,
+              '/friendProfile',
+              arguments: {'uid': uid, 'name': name},
+            );
+          },
+        );
+      },
+    );
   }
 }
