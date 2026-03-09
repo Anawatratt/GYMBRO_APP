@@ -2,7 +2,16 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
+
+// Providers
+import 'providers/auth_provider.dart';
+
+// Screens
+import 'screens/friends_screen.dart';
 import 'screens/home_screen.dart';
+import 'screens/login_screen.dart';
+import 'screens/register_screen.dart';
+import 'screens/profile_setup_screen.dart';
 import 'screens/search_screen.dart';
 import 'screens/plan_list_screen.dart';
 import 'screens/plan_detail_screen.dart';
@@ -17,7 +26,6 @@ void main() async {
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
-  // await seedAll();
   runApp(const ProviderScope(child: GymbroApp()));
 }
 
@@ -47,9 +55,7 @@ class GymbroApp extends StatelessWidget {
         ),
         cardTheme: CardThemeData(
           elevation: 0,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           color: Colors.white,
         ),
         elevatedButtonTheme: ElevatedButtonThemeData(
@@ -58,14 +64,13 @@ class GymbroApp extends StatelessWidget {
             foregroundColor: Colors.white,
             elevation: 0,
             padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(14),
-            ),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
           ),
         ),
       ),
-      home: const HomeScreen(),
+      home: const AuthGate(),
       routes: {
+        '/register': (context) => const RegisterScreen(),
         '/search': (context) => const SearchScreen(),
         '/plans': (context) => const PlanListScreen(),
         '/planDetail': (context) => const PlanDetailScreen(),
@@ -74,6 +79,43 @@ class GymbroApp extends StatelessWidget {
         '/progressBreakdown': (context) => const ProgressBreakdownScreen(),
         '/notes': (context) => const NotesScreen(),
         '/workoutHistory': (context) => const WorkoutHistoryScreen(),
+        '/friends': (context) => const FriendsScreen(),
+      },
+    );
+  }
+}
+
+/// Auth gate: routes to Login, ProfileSetup, or Home based on auth state.
+class AuthGate extends ConsumerWidget {
+  const AuthGate({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final authState = ref.watch(authStateProvider);
+
+    return authState.when(
+      loading: () => const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      ),
+      error: (e, _) => const LoginScreen(),
+      data: (firebaseUser) {
+        if (firebaseUser == null) {
+          return const LoginScreen();
+        }
+        // Logged in — check if profile is complete
+        final userDoc = ref.watch(currentUserDocProvider);
+        return userDoc.when(
+          loading: () => const Scaffold(
+            body: Center(child: CircularProgressIndicator()),
+          ),
+          error: (e, _) => const HomeScreen(),
+          data: (appUser) {
+            if (appUser == null || !appUser.profileComplete) {
+              return const ProfileSetupScreen();
+            }
+            return const HomeScreen();
+          },
+        );
       },
     );
   }
