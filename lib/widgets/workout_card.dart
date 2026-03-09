@@ -20,7 +20,7 @@ class WorkoutCard extends StatelessWidget {
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(20),
         gradient: const LinearGradient(
-          colors: [Color(0xFF283593), Color(0xFF5C6BC0)],
+          colors: [Color(0xFFB71C1C), Color(0xFFE53935)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),

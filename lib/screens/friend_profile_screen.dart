@@ -1,196 +1,300 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../models/app_user.dart';
-import '../providers/auth_provider.dart';
+import '../app_state.dart';
+import 'notes_screen.dart';
+import 'progress_analytics_screen.dart';
 
 class FriendProfileScreen extends ConsumerWidget {
-  final AppUser friend;
-  const FriendProfileScreen({super.key, required this.friend});
+  const FriendProfileScreen({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final me = ref.watch(currentUserDocProvider).value;
+    final args =
+        ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
+    final friendUid = args?['uid'] as String? ?? '';
+    final friendName = args?['name'] as String? ?? 'Friend';
 
-    final levelColors = {
-      'beginner': const Color(0xFF4CAF50),
-      'intermediate': const Color(0xFFFF9800),
-      'advanced': const Color(0xFFE53935),
-    };
-    final levelColor = levelColors[friend.fitnessLevel] ?? const Color(0xFF3F51B5);
-
-    return Scaffold(
-      backgroundColor: const Color(0xFFF5F6FA),
-      body: CustomScrollView(
-        slivers: [
-          SliverAppBar(
-            expandedHeight: 220,
-            pinned: true,
-            backgroundColor: const Color(0xFF283593),
-            leading: IconButton(
-              icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white),
-              onPressed: () => Navigator.pop(context),
-            ),
-            flexibleSpace: FlexibleSpaceBar(
-              background: Container(
-                decoration: const BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [Color(0xFF283593), Color(0xFF5C6BC0)],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                ),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const SizedBox(height: 50),
-                    CircleAvatar(
-                      radius: 44,
-                      backgroundColor: Colors.white.withAlpha(40),
-                      child: Text(
-                        friend.displayName.isNotEmpty
-                            ? friend.displayName[0].toUpperCase()
-                            : '?',
-                        style: const TextStyle(fontSize: 40, color: Colors.white, fontWeight: FontWeight.w800),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    Text(friend.displayName,
-                        style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: Colors.white)),
-                    const SizedBox(height: 4),
-                    Text(friend.gymName,
-                        style: TextStyle(color: Colors.white.withAlpha(180), fontSize: 14)),
-                  ],
-                ),
-              ),
-            ),
+    return DefaultTabController(
+      length: 3,
+      child: Scaffold(
+        appBar: AppBar(
+          title: Text(friendName),
+          bottom: const TabBar(
+            labelColor: Color(0xFFE53935),
+            unselectedLabelColor: Colors.grey,
+            indicatorColor: Color(0xFFE53935),
+            tabs: [
+              Tab(icon: Icon(Icons.bar_chart_rounded), text: 'Progress'),
+              Tab(icon: Icon(Icons.calendar_month_rounded), text: 'Plan'),
+              Tab(icon: Icon(Icons.sticky_note_2_rounded), text: 'Notes'),
+            ],
           ),
-          SliverPadding(
-            padding: const EdgeInsets.all(20),
-            sliver: SliverList(
-              delegate: SliverChildListDelegate([
-                // Read-only badge
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                  decoration: BoxDecoration(
-                    color: Colors.orange.withAlpha(20),
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: Colors.orange.withAlpha(60)),
-                  ),
-                  child: const Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.visibility_outlined, size: 16, color: Colors.orange),
-                      SizedBox(width: 6),
-                      Text('Read-only profile', style: TextStyle(color: Colors.orange, fontSize: 13, fontWeight: FontWeight.w600)),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 24),
-
-                // Fitness level
-                _InfoCard(
-                  icon: Icons.fitness_center,
-                  iconColor: levelColor,
-                  label: 'Fitness Level',
-                  value: friend.fitnessLevel[0].toUpperCase() + friend.fitnessLevel.substring(1),
-                  valueColor: levelColor,
-                ),
-                const SizedBox(height: 12),
-
-                // Gym
-                _InfoCard(
-                  icon: Icons.location_on_outlined,
-                  iconColor: const Color(0xFF3F51B5),
-                  label: 'Gym',
-                  value: friend.gymName.isEmpty ? 'Not specified' : friend.gymName,
-                ),
-                const SizedBox(height: 12),
-
-                // Bio
-                if (friend.bio.isNotEmpty) ...[
-                  _InfoCard(
-                    icon: Icons.info_outline,
-                    iconColor: const Color(0xFF00897B),
-                    label: 'Bio',
-                    value: friend.bio,
-                  ),
-                  const SizedBox(height: 12),
-                ],
-
-                // Email
-                _InfoCard(
-                  icon: Icons.email_outlined,
-                  iconColor: Colors.grey,
-                  label: 'Email',
-                  value: friend.email,
-                ),
-
-                if (me != null && me.uid == friend.uid)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 16),
-                    child: Center(
-                      child: Text("This is your own profile", style: TextStyle(color: Colors.grey[400], fontSize: 13)),
-                    ),
-                  ),
-              ]),
-            ),
-          ),
-        ],
+        ),
+        body: TabBarView(
+          children: [
+            // Progress tab — reuse ProgressAnalyticsScreen content
+            ProgressAnalyticsScreen(viewUid: friendUid),
+            // Plan tab — view-only plan
+            _FriendPlanTab(uid: friendUid),
+            // Notes tab — view-only
+            NotesScreen(viewUid: friendUid),
+          ],
+        ),
       ),
     );
   }
 }
 
-class _InfoCard extends StatelessWidget {
-  final IconData icon;
-  final Color iconColor;
-  final String label;
-  final String value;
-  final Color? valueColor;
+// ── Plan tab: shows friend's active program (view-only) ──
 
-  const _InfoCard({
-    required this.icon,
-    required this.iconColor,
-    required this.label,
-    required this.value,
-    this.valueColor,
-  });
+class _FriendPlanTab extends ConsumerWidget {
+  final String uid;
+  const _FriendPlanTab({required this.uid});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final profileAsync = ref.watch(profileByUidProvider(uid));
+
+    return profileAsync.when(
+      loading: () => const Center(child: CircularProgressIndicator()),
+      error: (e, _) => Center(child: Text('Error: $e')),
+      data: (profile) {
+        final activeProgramId = profile?.activeProgramId;
+        if (activeProgramId == null || activeProgramId.isEmpty) {
+          return Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.calendar_month_outlined,
+                    size: 56, color: Colors.grey[300]),
+                const SizedBox(height: 12),
+                Text('No active program',
+                    style:
+                        TextStyle(color: Colors.grey[400], fontSize: 15)),
+              ],
+            ),
+          );
+        }
+        return _ProgramSessionsView(programId: activeProgramId);
+      },
+    );
+  }
+}
+
+class _ProgramSessionsView extends StatefulWidget {
+  final String programId;
+  const _ProgramSessionsView({required this.programId});
+
+  @override
+  State<_ProgramSessionsView> createState() => _ProgramSessionsViewState();
+}
+
+class _ProgramSessionsViewState extends State<_ProgramSessionsView> {
+  int _selectedIdx = 0;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
-      ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: iconColor.withAlpha(20),
-              borderRadius: BorderRadius.circular(10),
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('programs')
+          .doc(widget.programId)
+          .collection('sessions')
+          .orderBy('day_number')
+          .snapshots(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        final sessions = snapshot.data?.docs ?? [];
+        if (sessions.isEmpty) {
+          return Center(
+            child: Text('No sessions',
+                style: TextStyle(color: Colors.grey[400], fontSize: 15)),
+          );
+        }
+
+        if (_selectedIdx >= sessions.length) _selectedIdx = 0;
+
+        final currentSession =
+            sessions[_selectedIdx].data() as Map<String, dynamic>;
+        final exercises =
+            currentSession['exercises'] as List<dynamic>? ?? [];
+
+        return Column(
+          children: [
+            // Session selector
+            Container(
+              height: 88,
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              child: ListView.builder(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                itemCount: sessions.length,
+                itemBuilder: (context, index) {
+                  final s =
+                      sessions[index].data() as Map<String, dynamic>;
+                  final isSelected = index == _selectedIdx;
+                  final split = s['workout_split'] ?? '';
+                  final dayNum = s['day_number'] ?? (index + 1);
+
+                  return GestureDetector(
+                    onTap: () =>
+                        setState(() => _selectedIdx = index),
+                    child: Container(
+                      width: 64,
+                      margin: const EdgeInsets.symmetric(horizontal: 6),
+                      decoration: BoxDecoration(
+                        color: isSelected
+                            ? const Color(0xFFE53935)
+                            : Colors.white,
+                        borderRadius: BorderRadius.circular(16),
+                        boxShadow: isSelected
+                            ? [
+                                BoxShadow(
+                                  color: const Color(0xFFE53935)
+                                      .withAlpha(40),
+                                  blurRadius: 8,
+                                  offset: const Offset(0, 4),
+                                ),
+                              ]
+                            : null,
+                      ),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text('Day',
+                              style: TextStyle(
+                                color: isSelected
+                                    ? Colors.white70
+                                    : Colors.grey[500],
+                                fontSize: 11,
+                              )),
+                          const SizedBox(height: 2),
+                          Text('$dayNum',
+                              style: TextStyle(
+                                color: isSelected
+                                    ? Colors.white
+                                    : const Color(0xFF1A1A2E),
+                                fontSize: 18,
+                                fontWeight: FontWeight.w700,
+                              )),
+                          Text(split,
+                              style: TextStyle(
+                                color: isSelected
+                                    ? Colors.white60
+                                    : Colors.grey[400],
+                                fontSize: 10,
+                              )),
+                        ],
+                      ),
+                    ),
+                  );
+                },
+              ),
             ),
-            child: Icon(icon, color: iconColor, size: 20),
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(label, style: TextStyle(fontSize: 12, color: Colors.grey[500])),
-                const SizedBox(height: 2),
-                Text(value,
-                    style: TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w600,
-                        color: valueColor ?? const Color(0xFF1A1A2E))),
-              ],
+
+            // Session header
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 4, 20, 8),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      currentSession['session_name'] ?? '',
+                      style: const TextStyle(
+                          fontSize: 17, fontWeight: FontWeight.w700),
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Colors.grey[100],
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Text('${exercises.length} exercises',
+                        style: TextStyle(
+                          color: Colors.grey[600],
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        )),
+                  ),
+                ],
+              ),
             ),
-          ),
-        ],
-      ),
+
+            // Exercise list (view-only)
+            Expanded(
+              child: ListView.separated(
+                padding: const EdgeInsets.fromLTRB(20, 4, 20, 12),
+                itemCount: exercises.length,
+                separatorBuilder: (_, __) => const SizedBox(height: 8),
+                itemBuilder: (context, index) {
+                  final ex =
+                      exercises[index] as Map<String, dynamic>;
+                  final exerciseId =
+                      ex['exercise_id'] as String? ?? '';
+                  final sets = ex['sets'] ?? 0;
+                  final reps = ex['reps'] ?? 0;
+                  final weight = ex['weight'];
+                  final weightStr = weight != null
+                      ? '${(weight as num).toStringAsFixed(0)} lbs'
+                      : 'BW';
+                  final restSec = ex['rest_seconds'] ?? 0;
+
+                  return Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 16, vertical: 12),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(16),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withAlpha(8),
+                          blurRadius: 6,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(Icons.fitness_center,
+                            size: 20, color: Colors.grey[700]),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                _fmt(exerciseId),
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.w600),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                '$sets x $reps  ·  $weightStr  ·  ${restSec}s rest',
+                                style: TextStyle(
+                                    color: Colors.grey[500],
+                                    fontSize: 13),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
+
+  String _fmt(String s) => s
+      .split('_')
+      .map((w) => w.isEmpty ? w : w[0].toUpperCase() + w.substring(1))
+      .join(' ');
 }

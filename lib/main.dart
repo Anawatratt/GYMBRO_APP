@@ -3,10 +3,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
 
-// Providers
 import 'providers/auth_provider.dart';
+import 'app_state.dart';
+import 'seed.dart';
 
-// Screens
 import 'screens/friends_screen.dart';
 import 'screens/home_screen.dart';
 import 'screens/login_screen.dart';
@@ -20,12 +20,12 @@ import 'screens/progress_analytics_screen.dart';
 import 'screens/progress_breakdown_screen.dart';
 import 'screens/notes_screen.dart';
 import 'screens/workout_history_screen.dart';
+import 'screens/friend_profile_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform,
-  );
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  await seedAll();
   runApp(const ProviderScope(child: GymbroApp()));
 }
 
@@ -39,7 +39,7 @@ class GymbroApp extends StatelessWidget {
       title: 'Gymbro',
       theme: ThemeData(
         useMaterial3: true,
-        colorSchemeSeed: const Color(0xFF3F51B5),
+        colorSchemeSeed: const Color(0xFFE53935),
         brightness: Brightness.light,
         scaffoldBackgroundColor: const Color(0xFFF5F6FA),
         appBarTheme: const AppBarTheme(
@@ -48,10 +48,7 @@ class GymbroApp extends StatelessWidget {
           elevation: 0,
           centerTitle: false,
           titleTextStyle: TextStyle(
-            color: Color(0xFF1A1A2E),
-            fontSize: 20,
-            fontWeight: FontWeight.w700,
-          ),
+            color: Color(0xFF1A1A2E), fontSize: 20, fontWeight: FontWeight.w700),
         ),
         cardTheme: CardThemeData(
           elevation: 0,
@@ -60,59 +57,54 @@ class GymbroApp extends StatelessWidget {
         ),
         elevatedButtonTheme: ElevatedButtonThemeData(
           style: ElevatedButton.styleFrom(
-            backgroundColor: const Color(0xFF3F51B5),
+            backgroundColor: const Color(0xFFE53935),
             foregroundColor: Colors.white,
             elevation: 0,
             padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
           ),
         ),
+        textButtonTheme: TextButtonThemeData(
+          style: TextButton.styleFrom(foregroundColor: const Color(0xFFE53935)),
+        ),
       ),
       home: const AuthGate(),
       routes: {
-        '/register': (context) => const RegisterScreen(),
-        '/search': (context) => const SearchScreen(),
-        '/plans': (context) => const PlanListScreen(),
-        '/planDetail': (context) => const PlanDetailScreen(),
-        '/customPlan': (context) => const CustomPlanScreen(),
-        '/progressAnalytics': (context) => const ProgressAnalyticsScreen(),
-        '/progressBreakdown': (context) => const ProgressBreakdownScreen(),
-        '/notes': (context) => const NotesScreen(),
-        '/workoutHistory': (context) => const WorkoutHistoryScreen(),
-        '/friends': (context) => const FriendsScreen(),
+        '/login':              (c) => const LoginScreen(),
+        '/register':           (c) => const RegisterScreen(),
+        '/home':               (c) => const HomeScreen(),
+        '/search':             (c) => const SearchScreen(),
+        '/plans':              (c) => const PlanListScreen(),
+        '/planDetail':         (c) => const PlanDetailScreen(),
+        '/customPlan':         (c) => const CustomPlanScreen(),
+        '/progressAnalytics':  (c) => const ProgressAnalyticsScreen(),
+        '/progressBreakdown':  (c) => const ProgressBreakdownScreen(),
+        '/notes':              (c) => const NotesScreen(),
+        '/workoutHistory':     (c) => const WorkoutHistoryScreen(),
+        '/friendProfile':      (c) => const FriendProfileScreen(),
+        '/friends':            (c) => const FriendsScreen(),
       },
     );
   }
 }
 
-/// Auth gate: routes to Login, ProfileSetup, or Home based on auth state.
 class AuthGate extends ConsumerWidget {
   const AuthGate({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final authState = ref.watch(authStateProvider);
-
     return authState.when(
-      loading: () => const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
-      ),
-      error: (e, _) => const LoginScreen(),
+      loading: () => const Scaffold(body: Center(child: CircularProgressIndicator())),
+      error: (_, __) => const LoginScreen(),
       data: (firebaseUser) {
-        if (firebaseUser == null) {
-          return const LoginScreen();
-        }
-        // Logged in — check if profile is complete
+        if (firebaseUser == null) return const LoginScreen();
         final userDoc = ref.watch(currentUserDocProvider);
         return userDoc.when(
-          loading: () => const Scaffold(
-            body: Center(child: CircularProgressIndicator()),
-          ),
-          error: (e, _) => const HomeScreen(),
+          loading: () => const Scaffold(body: Center(child: CircularProgressIndicator())),
+          error: (_, __) => const HomeScreen(),
           data: (appUser) {
-            if (appUser == null || !appUser.profileComplete) {
-              return const ProfileSetupScreen();
-            }
+            if (appUser == null || !appUser.profileComplete) return const ProfileSetupScreen();
             return const HomeScreen();
           },
         );

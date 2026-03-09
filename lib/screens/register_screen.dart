@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../providers/auth_provider.dart';
+import '../app_state.dart';
 
 class RegisterScreen extends ConsumerStatefulWidget {
   const RegisterScreen({super.key});
@@ -10,147 +10,218 @@ class RegisterScreen extends ConsumerStatefulWidget {
 }
 
 class _RegisterScreenState extends ConsumerState<RegisterScreen> {
+  final _usernameCtrl = TextEditingController();
   final _nameCtrl = TextEditingController();
-  final _emailCtrl = TextEditingController();
-  final _passCtrl = TextEditingController();
+  final _imageUrlCtrl = TextEditingController();
+  final _passwordCtrl = TextEditingController();
   final _confirmCtrl = TextEditingController();
-  bool _loading = false;
   bool _obscure = true;
 
   @override
   void dispose() {
+    _usernameCtrl.dispose();
     _nameCtrl.dispose();
-    _emailCtrl.dispose();
-    _passCtrl.dispose();
+    _imageUrlCtrl.dispose();
+    _passwordCtrl.dispose();
     _confirmCtrl.dispose();
     super.dispose();
   }
 
   Future<void> _register() async {
+    final username = _usernameCtrl.text.trim();
     final name = _nameCtrl.text.trim();
-    final email = _emailCtrl.text.trim();
-    final pass = _passCtrl.text;
+    final password = _passwordCtrl.text;
     final confirm = _confirmCtrl.text;
+    final imageUrl = _imageUrlCtrl.text.trim();
 
-    if (name.isEmpty || email.isEmpty || pass.isEmpty) {
-      _showError('Please fill in all fields.');
+    if (username.isEmpty || name.isEmpty || password.isEmpty) {
+      _showError('Please fill in all required fields');
       return;
     }
-    if (pass.length < 6) {
-      _showError('Password must be at least 6 characters.');
+    if (password != confirm) {
+      _showError('Passwords do not match');
       return;
     }
-    if (pass != confirm) {
-      _showError('Passwords do not match.');
+    if (password.length < 6) {
+      _showError('Password must be at least 6 characters');
       return;
     }
 
-    setState(() => _loading = true);
-    try {
-      await ref.read(authServiceProvider).register(name, email, pass);
-      // Router will redirect to profile setup automatically
-    } catch (e) {
-      if (mounted) _showError(_friendlyError(e.toString()));
-    } finally {
-      if (mounted) setState(() => _loading = false);
+    await ref.read(authNotifierProvider.notifier).register(
+          username: username,
+          password: password,
+          name: name,
+          imageUrl: imageUrl.isEmpty ? null : imageUrl,
+        );
+
+    final authState = ref.read(authNotifierProvider);
+    if (authState.hasError && mounted) {
+      _showError(_friendlyError(authState.error!));
     }
   }
 
   void _showError(String msg) {
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(msg), backgroundColor: Colors.red),
+      SnackBar(
+        content: Text(msg),
+        backgroundColor: Colors.red[400],
+      ),
     );
   }
 
-  String _friendlyError(String e) {
-    if (e.contains('email-already-in-use')) return 'This email is already registered.';
-    if (e.contains('invalid-email')) return 'Invalid email format.';
-    if (e.contains('weak-password')) return 'Password is too weak.';
-    return 'Registration failed. Please try again.';
+  String _friendlyError(Object error) {
+    final msg = error.toString();
+    if (msg.contains('email-already-in-use')) return 'Username already taken';
+    if (msg.contains('weak-password')) return 'Password is too weak';
+    if (msg.contains('network')) return 'Network error, try again';
+    return 'Registration failed, please try again';
   }
 
   @override
   Widget build(BuildContext context) {
+    final authState = ref.watch(authNotifierProvider);
+    final loading = authState.isLoading;
+
     return Scaffold(
       backgroundColor: const Color(0xFFF5F6FA),
       appBar: AppBar(
+        title: const Text('Create Account'),
         backgroundColor: Colors.transparent,
+        foregroundColor: const Color(0xFF1A1A2E),
         elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Color(0xFF1A1A2E)),
-          onPressed: () => Navigator.pop(context),
-        ),
       ),
       body: SafeArea(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 16),
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              const Text('Create Account',
-                  style: TextStyle(fontSize: 28, fontWeight: FontWeight.w800, color: Color(0xFF1A1A2E))),
-              const SizedBox(height: 6),
-              Text('Join the GymBro community 🏋️', style: TextStyle(color: Colors.grey[500], fontSize: 15)),
-              const SizedBox(height: 36),
-
-              _label('Display Name'),
-              const SizedBox(height: 8),
-              _field(controller: _nameCtrl, hint: 'e.g. JJ', icon: Icons.person_outline),
-              const SizedBox(height: 20),
-              _label('Email'),
-              const SizedBox(height: 8),
-              _field(controller: _emailCtrl, hint: 'your@email.com', keyboardType: TextInputType.emailAddress, icon: Icons.email_outlined),
-              const SizedBox(height: 20),
-              _label('Password'),
-              const SizedBox(height: 8),
-              _field(
-                controller: _passCtrl,
-                hint: 'Min. 6 characters',
-                obscure: _obscure,
-                icon: Icons.lock_outline,
-                suffix: IconButton(
-                  icon: Icon(_obscure ? Icons.visibility_off : Icons.visibility, color: Colors.grey),
-                  onPressed: () => setState(() => _obscure = !_obscure),
+              Text(
+                'Join GymBro',
+                style: TextStyle(
+                  fontSize: 26,
+                  fontWeight: FontWeight.w800,
+                  color: const Color(0xFF1A1A2E),
                 ),
               ),
-              const SizedBox(height: 20),
-              _label('Confirm Password'),
-              const SizedBox(height: 8),
-              _field(
-                controller: _confirmCtrl,
-                hint: 'Repeat password',
-                obscure: true,
-                icon: Icons.lock_outline,
+              const SizedBox(height: 6),
+              Text(
+                'Create your account to get started',
+                style: TextStyle(fontSize: 14, color: Colors.grey[500]),
               ),
-              const SizedBox(height: 36),
+              const SizedBox(height: 32),
+
+              _buildField(
+                controller: _usernameCtrl,
+                label: 'Username *',
+                hint: 'e.g. john123',
+                icon: Icons.alternate_email,
+                action: TextInputAction.next,
+                autocorrect: false,
+              ),
+              const SizedBox(height: 14),
+
+              _buildField(
+                controller: _nameCtrl,
+                label: 'Display Name *',
+                hint: 'e.g. John Smith',
+                icon: Icons.person_outline,
+                action: TextInputAction.next,
+              ),
+              const SizedBox(height: 14),
+
+              _buildField(
+                controller: _imageUrlCtrl,
+                label: 'Profile Image URL (optional)',
+                hint: 'https://...',
+                icon: Icons.image_outlined,
+                action: TextInputAction.next,
+                autocorrect: false,
+              ),
+              const SizedBox(height: 14),
+
+              TextField(
+                controller: _passwordCtrl,
+                obscureText: _obscure,
+                textInputAction: TextInputAction.next,
+                decoration: InputDecoration(
+                  labelText: 'Password *',
+                  prefixIcon: const Icon(Icons.lock_outline),
+                  suffixIcon: IconButton(
+                    icon: Icon(
+                        _obscure ? Icons.visibility_off : Icons.visibility),
+                    onPressed: () => setState(() => _obscure = !_obscure),
+                  ),
+                  filled: true,
+                  fillColor: Colors.white,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(14),
+                    borderSide: BorderSide.none,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 14),
+
+              TextField(
+                controller: _confirmCtrl,
+                obscureText: _obscure,
+                textInputAction: TextInputAction.done,
+                onSubmitted: (_) => _register(),
+                decoration: InputDecoration(
+                  labelText: 'Confirm Password *',
+                  prefixIcon: const Icon(Icons.lock_outline),
+                  filled: true,
+                  fillColor: Colors.white,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(14),
+                    borderSide: BorderSide.none,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 28),
 
               SizedBox(
-                width: double.infinity,
                 height: 52,
                 child: ElevatedButton(
-                  onPressed: _loading ? null : _register,
+                  onPressed: loading ? null : _register,
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF3F51B5),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                    backgroundColor: const Color(0xFFE53935),
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
                   ),
-                  child: _loading
-                      ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5))
-                      : const Text('Create Account', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: Colors.white)),
+                  child: loading
+                      ? const SizedBox(
+                          width: 22,
+                          height: 22,
+                          child: CircularProgressIndicator(
+                              color: Colors.white, strokeWidth: 2.5),
+                        )
+                      : const Text('Create Account',
+                          style: TextStyle(
+                              fontSize: 16, fontWeight: FontWeight.w700)),
                 ),
               ),
-              const SizedBox(height: 24),
+              const SizedBox(height: 20),
+
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Text('Already have an account? ', style: TextStyle(color: Colors.grey[600])),
+                  Text('Already have an account? ',
+                      style: TextStyle(color: Colors.grey[600])),
                   GestureDetector(
                     onTap: () => Navigator.pop(context),
-                    child: const Text('Sign In',
-                        style: TextStyle(color: Color(0xFF3F51B5), fontWeight: FontWeight.w700)),
+                    child: const Text(
+                      'Sign In',
+                      style: TextStyle(
+                        color: Color(0xFFE53935),
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
                   ),
                 ],
               ),
-              const SizedBox(height: 24),
             ],
           ),
         ),
@@ -158,34 +229,27 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
     );
   }
 
-  Widget _label(String text) => Text(text,
-      style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14, color: Color(0xFF1A1A2E)));
-
-  Widget _field({
+  Widget _buildField({
     required TextEditingController controller,
+    required String label,
     required String hint,
-    TextInputType keyboardType = TextInputType.text,
-    bool obscure = false,
-    IconData? icon,
-    Widget? suffix,
+    required IconData icon,
+    TextInputAction action = TextInputAction.next,
+    bool autocorrect = true,
   }) {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        boxShadow: [BoxShadow(color: Colors.black.withAlpha(8), blurRadius: 10, offset: const Offset(0, 2))],
-      ),
-      child: TextField(
-        controller: controller,
-        keyboardType: keyboardType,
-        obscureText: obscure,
-        decoration: InputDecoration(
-          hintText: hint,
-          hintStyle: TextStyle(color: Colors.grey[400]),
-          prefixIcon: icon != null ? Icon(icon, color: Colors.grey[400], size: 20) : null,
-          border: InputBorder.none,
-          contentPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
-          suffixIcon: suffix,
+    return TextField(
+      controller: controller,
+      textInputAction: action,
+      autocorrect: autocorrect,
+      decoration: InputDecoration(
+        labelText: label,
+        hintText: hint,
+        prefixIcon: Icon(icon),
+        filled: true,
+        fillColor: Colors.white,
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide.none,
         ),
       ),
     );

@@ -21,7 +21,8 @@ class PlanListScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final trainee = ref.watch(appStateProvider).currentTrainee;
+    final profileName =
+        ref.watch(userProfileProvider).value?.name ?? 'Athlete';
 
     return Scaffold(
       appBar: AppBar(title: const Text('Workout Plan')),
@@ -31,7 +32,7 @@ class PlanListScreen extends ConsumerWidget {
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
             child: Text(
-              'Get ready to train, ${trainee.name}',
+              'Get ready to train, $profileName',
               style: TextStyle(color: Colors.grey[500], fontSize: 15),
             ),
           ),
@@ -74,8 +75,6 @@ class PlanListScreen extends ConsumerWidget {
                     final diff = data['difficulty_level'] ?? '';
                     final daysPerWeek = data['days_per_week'] ?? 0;
                     final durationWeeks = data['duration_weeks'] ?? 0;
-                    final isActive = data['is_active'] == true;
-
                     return GestureDetector(
                       onTap: () => Navigator.pushNamed(
                         context,
@@ -115,22 +114,6 @@ class PlanListScreen extends ConsumerWidget {
                                                 fontSize: 15,
                                                 fontWeight: FontWeight.w700)),
                                       ),
-                                      if (isActive)
-                                        Container(
-                                          padding: const EdgeInsets.symmetric(
-                                              horizontal: 8, vertical: 3),
-                                          decoration: BoxDecoration(
-                                            color: const Color(0xFF4CAF50)
-                                                .withAlpha(20),
-                                            borderRadius:
-                                                BorderRadius.circular(20),
-                                          ),
-                                          child: const Text('Active',
-                                              style: TextStyle(
-                                                  color: Color(0xFF4CAF50),
-                                                  fontSize: 11,
-                                                  fontWeight: FontWeight.w600)),
-                                        ),
                                     ],
                                   ),
                                   const SizedBox(height: 4),
