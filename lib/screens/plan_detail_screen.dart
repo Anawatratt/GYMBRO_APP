@@ -1,14 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../providers/auth_provider.dart';
+import '../providers/friend_provider.dart';
 
-class PlanDetailScreen extends StatefulWidget {
+class PlanDetailScreen extends ConsumerStatefulWidget {
   const PlanDetailScreen({super.key});
 
   @override
-  State<PlanDetailScreen> createState() => _PlanDetailScreenState();
+  ConsumerState<PlanDetailScreen> createState() => _PlanDetailScreenState();
 }
 
-class _PlanDetailScreenState extends State<PlanDetailScreen> {
+class _PlanDetailScreenState extends ConsumerState<PlanDetailScreen> {
   int _selectedSessionIndex = 0;
   final Set<String> _completedSessions = {};
   bool _saving = false;
@@ -23,10 +26,16 @@ class _PlanDetailScreenState extends State<PlanDetailScreen> {
 
     setState(() => _saving = true);
 
-    await FirebaseFirestore.instance.collection('workout_history').add({
+    final me = ref.read(currentUserDocProvider).value;
+    final db = FirebaseFirestore.instance;
+
+    // 1. Save workout history
+    await db.collection('workout_history').add({
       'program_name': programName,
       'session_name': sessionName,
       'completed_at': FieldValue.serverTimestamp(),
+      'user_uid': me?.uid ?? '',
+      'user_name': me?.displayName ?? '',
       'exercises': exercises
           .map((e) => {
                 'exercise_id': e['exercise_id'],
@@ -37,6 +46,35 @@ class _PlanDetailScreenState extends State<PlanDetailScreen> {
           .toList(),
     });
 
+    // 2. Notify all accepted friends
+    if (me != null) {
+      final friends = ref.read(friendsStreamProvider).value ?? [];
+      final accepted = friends.where((f) => f.status == 'accepted').toList();
+
+      if (accepted.isNotEmpty) {
+        final now = Timestamp.now();
+        final batch = db.batch();
+        for (final friend in accepted) {
+          final notifRef = db
+              .collection('users')
+              .doc(friend.friendUid)
+              .collection('notifications')
+              .doc();
+          batch.set(notifRef, {
+            'type': 'workout_complete',
+            'fromUserId': me.uid,
+            'fromUserName': me.displayName,
+            'title': 'Workout Complete! 🏋️',
+            'message': '${me.displayName} just finished "$sessionName"! 💪',
+            'read': false,
+            'actionDone': false,
+            'createdAt': now,
+          });
+        }
+        await batch.commit();
+      }
+    }
+
     setState(() {
       _completedSessions.add(sessionKey);
       _saving = false;
@@ -45,7 +83,7 @@ class _PlanDetailScreenState extends State<PlanDetailScreen> {
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('$sessionName completed!'),
+          content: Text('$sessionName completed! Friends notified 🎉'),
           backgroundColor: const Color(0xFF4CAF50),
           behavior: SnackBarBehavior.floating,
           shape:
@@ -359,7 +397,7 @@ class _PlanDetailScreenState extends State<PlanDetailScreen> {
                           )
                         : Text(
                             isDone
-                                ? 'Completed!'
+                                ? '✅ Completed!'
                                 : 'Mark All Complete',
                             style:
                                 const TextStyle(fontWeight: FontWeight.w700),
