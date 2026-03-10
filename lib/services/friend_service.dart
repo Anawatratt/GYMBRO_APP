@@ -5,16 +5,35 @@ import '../models/app_user.dart';
 class FriendService {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
 
-  /// Search for a user by exact email. Returns null if not found or is self.
-  Future<AppUser?> searchByEmail(String email, String myUid) async {
+  /// Suggest users whose username starts with [prefix] (up to 5 results).
+  Future<List<AppUser>> suggestByPrefix(String prefix, String myUid) async {
+    if (prefix.isEmpty) return [];
+    // strip leading @ if user typed @username
+    final lower = prefix.trim().toLowerCase().replaceFirst(RegExp(r'^@'), '');
     final query = await _db
         .collection('users')
-        .where('email', isEqualTo: email.trim().toLowerCase())
+        .where('email', isGreaterThanOrEqualTo: lower)
+        .where('email', isLessThan: '$lower\uf8ff')
+        .limit(6)
+        .get();
+    return query.docs
+        .where((d) => d.id != myUid)
+        .map((d) => AppUser.fromMap(d.id, d.data()))
+        .take(5)
+        .toList();
+  }
+
+  /// Search for a user by username. Returns null if not found or is self.
+  Future<AppUser?> searchByUsername(String username, String myUid) async {
+    final email = '${username.trim().toLowerCase()}@gymbro.app';
+    final query = await _db
+        .collection('users')
+        .where('email', isEqualTo: email)
         .limit(1)
         .get();
     if (query.docs.isEmpty) return null;
     final doc = query.docs.first;
-    if (doc.id == myUid) return null; // don't return self
+    if (doc.id == myUid) return null;
     return AppUser.fromMap(doc.id, doc.data());
   }
 
@@ -44,7 +63,14 @@ class FriendService {
 
   /// Send a friend request from [myUser] to [targetUid].
   /// Writes to: A/friends/B, B/friends/A, B/notifications/new.
-  Future<void> sendRequest(AppUser myUser, String targetUid, String targetName) async {
+  String _nameOf(AppUser u) {
+    if (u.displayName.isNotEmpty) return u.displayName;
+    final idx = u.email.indexOf('@');
+    if (idx > 0) return u.email.substring(0, idx);
+    return u.uid.substring(0, 8);
+  }
+
+  Future<void> sendRequest(AppUser myUser, AppUser target) async {
     final now = Timestamp.now();
     final batch = _db.batch();
 
@@ -53,23 +79,23 @@ class FriendService {
         .collection('users')
         .doc(myUser.uid)
         .collection('friends')
-        .doc(targetUid);
+        .doc(target.uid);
     batch.set(aRef, {
       'status': 'pending_sent',
-      'displayName': targetName,
-      'email': '', // will be filled from search result in UI
+      'displayName': _nameOf(target),
+      'email': target.email,
       'addedAt': now,
     });
 
     // B → A: pending_received
     final bRef = _db
         .collection('users')
-        .doc(targetUid)
+        .doc(target.uid)
         .collection('friends')
         .doc(myUser.uid);
     batch.set(bRef, {
       'status': 'pending_received',
-      'displayName': myUser.displayName,
+      'displayName': _nameOf(myUser),
       'email': myUser.email,
       'addedAt': now,
     });
@@ -77,15 +103,15 @@ class FriendService {
     // Notification for B
     final notifRef = _db
         .collection('users')
-        .doc(targetUid)
+        .doc(target.uid)
         .collection('notifications')
         .doc();
     batch.set(notifRef, {
       'type': 'friend_request',
       'fromUserId': myUser.uid,
-      'fromUserName': myUser.displayName,
+      'fromUserName': _nameOf(myUser),
       'title': 'Friend Request',
-      'message': '${myUser.displayName} wants to be your GymBro! 💪',
+      'message': '${_nameOf(myUser)} wants to be your GymBro! 💪',
       'read': false,
       'actionDone': false,
       'createdAt': now,

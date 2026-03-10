@@ -1,0 +1,53 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    match /users/{userId} {
+      // Any logged-in user can read profiles (needed for friend search)
+      allow read: if request.auth != null;
+      // Only the owner can write their own doc
+      allow create, update, delete: if request.auth.uid == userId;
+
+      // Friends subcollection — any authenticated user can write
+      // (needed for sending/accepting/declining friend requests)
+      match /friends/{friendId} {
+        allow read: if request.auth.uid == userId;
+        allow write: if request.auth != null;
+      }
+
+      // Notifications — anyone logged in can create (to send notifs to others)
+      // but only the owner can read/update/delete
+      match /notifications/{notifId} {
+        allow read: if request.auth.uid == userId;
+        allow create: if request.auth != null;
+        allow update, delete: if request.auth.uid == userId;
+      }
+
+      // Notes — only the owner
+      match /notes/{noteId} {
+        allow read, write: if request.auth.uid == userId;
+      }
+    }
+
+    // Workout history — any logged-in user can read (for friend progress viewing)
+    match /workout_history/{docId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null
+                    && request.auth.uid == request.resource.data.user_id;
+      allow update, delete: if request.auth != null
+                             && request.auth.uid == resource.data.user_id;
+    }
+
+    // Reference data — read-only for all logged-in users
+    match /programs/{docId} {
+      allow read: if request.auth != null;
+      match /sessions/{sessionId} {
+        allow read: if request.auth != null;
+      }
+    }
+    match /exercises/{docId}      { allow read: if request.auth != null; }
+    match /muscles/{docId}        { allow read: if request.auth != null; }
+    match /muscle_groups/{docId}  { allow read: if request.auth != null; }
+    match /machines/{docId}       { allow read: if request.auth != null; }
+  }
+}

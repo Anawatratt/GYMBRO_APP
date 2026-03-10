@@ -1,19 +1,28 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/note.dart';
+import '../models/friend.dart';
 import '../providers/auth_provider.dart';
 import '../providers/note_provider.dart';
+import '../providers/friend_provider.dart';
 
 class NotesScreen extends ConsumerWidget {
-  const NotesScreen({super.key});
+  final String? viewUid;
+  const NotesScreen({super.key, this.viewUid});
+
+  bool get _isViewOnly => viewUid != null;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final notesAsync = ref.watch(notesStreamProvider);
+    final notesAsync = _isViewOnly
+        ? ref.watch(notesByUidProvider(viewUid!))
+        : ref.watch(notesStreamProvider);
     final me = ref.watch(currentUserDocProvider).value;
 
     return Scaffold(
-      appBar: AppBar(
+      appBar: _isViewOnly
+          ? null
+          : AppBar(
         title: const Text('Notes'),
         bottom: me != null
             ? PreferredSize(
@@ -36,7 +45,22 @@ class NotesScreen extends ConsumerWidget {
         error: (e, _) => Center(child: Text('Error: $e')),
         data: (notes) {
           if (notes.isEmpty) {
-            return _EmptyState(onAdd: () => _showNoteSheet(context, ref, me?.uid));
+            return _isViewOnly
+                ? const Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.sticky_note_2_outlined,
+                            size: 56, color: Color(0xFF3A3A3C)),
+                        SizedBox(height: 12),
+                        Text('No notes yet',
+                            style: TextStyle(
+                                color: Color(0xFF6B6B6B), fontSize: 15)),
+                      ],
+                    ),
+                  )
+                : _EmptyState(
+                    onAdd: () => _showNoteSheet(context, ref, me?.uid));
           }
           return Padding(
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
@@ -46,25 +70,31 @@ class NotesScreen extends ConsumerWidget {
                 crossAxisCount: 2,
                 crossAxisSpacing: 12,
                 mainAxisSpacing: 12,
-                childAspectRatio: 0.85,
+                childAspectRatio: 0.78,
               ),
               itemBuilder: (context, i) {
                 final note = notes[i];
                 return _NoteCard(
                   note: note,
-                  onTap: () => _showNoteSheet(context, ref, me?.uid, note: note),
-                  onLongPress: () => _confirmDelete(context, ref, me?.uid, note.id),
+                  onTap: _isViewOnly
+                      ? () {}
+                      : () => _showNoteSheet(context, ref, me?.uid, note: note),
+                  onLongPress: _isViewOnly
+                      ? () {}
+                      : () => _confirmDelete(context, ref, me?.uid, note.id),
                 );
               },
             ),
           );
         },
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () => _showNoteSheet(context, ref, me?.uid),
-        backgroundColor: const Color(0xFF3F51B5),
-        child: const Icon(Icons.add, color: Colors.white),
-      ),
+      floatingActionButton: _isViewOnly
+          ? null
+          : FloatingActionButton(
+              onPressed: () => _showNoteSheet(context, ref, me?.uid),
+              backgroundColor: const Color(0xFFE53935),
+              child: const Icon(Icons.add, color: Colors.white),
+            ),
     );
   }
 
@@ -143,7 +173,6 @@ const _noteColors = [
   Color(0xFFFFE0B2),
 ];
 
-// Map updatedAt to a note color deterministically
 Color _noteColor(Note note) {
   final idx = note.id.hashCode.abs() % _noteColors.length;
   return _noteColors[idx];
@@ -163,7 +192,7 @@ class _NoteCard extends StatelessWidget {
       onTap: onTap,
       onLongPress: onLongPress,
       child: Container(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
           color: color,
           borderRadius: BorderRadius.circular(16),
@@ -171,18 +200,47 @@ class _NoteCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // Friend tag badge
+            if (note.hasTag) ...[
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: Colors.black.withAlpha(18),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.person, size: 11, color: Color(0xFF333333)),
+                    const SizedBox(width: 3),
+                    Flexible(
+                      child: Text(
+                        '@${note.taggedFriendName}',
+                        style: const TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w700,
+                          color: Color(0xFF333333),
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 6),
+            ],
             Text(note.title,
                 style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: Color(0xFF1A1A2E)),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis),
-            const SizedBox(height: 8),
+            const SizedBox(height: 6),
             Expanded(
               child: Text(note.content,
                   style: TextStyle(fontSize: 13, color: Colors.grey[700]),
                   maxLines: 5,
                   overflow: TextOverflow.ellipsis),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 6),
             Text(
               '${note.updatedAt.day}/${note.updatedAt.month}/${note.updatedAt.year}',
               style: TextStyle(fontSize: 11, color: Colors.grey[500]),
@@ -213,11 +271,16 @@ class _NoteEditorSheetState extends State<_NoteEditorSheet> {
   bool get _isEditing => widget.note != null;
   bool _saving = false;
 
+  String? _taggedFriendUid;
+  String? _taggedFriendName;
+
   @override
   void initState() {
     super.initState();
     _titleCtrl = TextEditingController(text: widget.note?.title ?? '');
     _contentCtrl = TextEditingController(text: widget.note?.content ?? '');
+    _taggedFriendUid = widget.note?.taggedFriendUid;
+    _taggedFriendName = widget.note?.taggedFriendName;
   }
 
   @override
@@ -225,6 +288,35 @@ class _NoteEditorSheetState extends State<_NoteEditorSheet> {
     _titleCtrl.dispose();
     _contentCtrl.dispose();
     super.dispose();
+  }
+
+  Future<void> _pickFriend() async {
+    final friends = widget.ref.read(friendsStreamProvider).value ?? [];
+    final accepted = friends.where((f) => f.status == 'accepted').toList();
+
+    if (accepted.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No friends yet. Add friends first!')),
+        );
+      }
+      return;
+    }
+
+    final picked = await showModalBottomSheet<Friend>(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => _FriendPickerSheet(friends: accepted),
+    );
+
+    if (picked != null && mounted) {
+      setState(() {
+        _taggedFriendUid = picked.friendUid;
+        _taggedFriendName = picked.displayName;
+      });
+    }
   }
 
   @override
@@ -265,9 +357,71 @@ class _NoteEditorSheetState extends State<_NoteEditorSheet> {
               border: OutlineInputBorder(),
               contentPadding: EdgeInsets.symmetric(horizontal: 14, vertical: 12),
             ),
-            maxLines: 5,
+            maxLines: 4,
           ),
-          const SizedBox(height: 18),
+          const SizedBox(height: 12),
+
+          // Tag friend row
+          Row(
+            children: [
+              const Text('Tag:', style: TextStyle(fontSize: 13, color: Colors.grey)),
+              const SizedBox(width: 8),
+              if (_taggedFriendUid != null)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF3F51B5).withAlpha(30),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: const Color(0xFF3F51B5).withAlpha(80)),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.person, size: 13, color: Color(0xFF3F51B5)),
+                      const SizedBox(width: 4),
+                      Text(
+                        '@$_taggedFriendName',
+                        style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: Color(0xFF3F51B5),
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      GestureDetector(
+                        onTap: () => setState(() {
+                          _taggedFriendUid = null;
+                          _taggedFriendName = null;
+                        }),
+                        child: const Icon(Icons.close, size: 14, color: Color(0xFF3F51B5)),
+                      ),
+                    ],
+                  ),
+                )
+              else
+                GestureDetector(
+                  onTap: _pickFriend,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF2C2C2E),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.alternate_email, size: 14, color: Color(0xFF9E9E9E)),
+                        const SizedBox(width: 4),
+                        Text('Tag a friend',
+                            style: TextStyle(fontSize: 13, color: Colors.grey[400])),
+                      ],
+                    ),
+                  ),
+                ),
+            ],
+          ),
+
+          const SizedBox(height: 16),
           ElevatedButton(
             onPressed: _saving ? null : _save,
             child: _saving
@@ -287,10 +441,21 @@ class _NoteEditorSheetState extends State<_NoteEditorSheet> {
     setState(() => _saving = true);
     try {
       final svc = widget.ref.read(noteServiceProvider);
+      final t = title.isEmpty ? 'Untitled' : title;
+      final clearTag = _taggedFriendUid == null && (widget.note?.taggedFriendUid != null);
       if (_isEditing) {
-        await svc.updateNote(widget.uid, widget.note!.id, title.isEmpty ? 'Untitled' : title, content);
+        await svc.updateNote(
+          widget.uid, widget.note!.id, t, content,
+          taggedFriendUid: _taggedFriendUid,
+          taggedFriendName: _taggedFriendName,
+          clearTag: clearTag,
+        );
       } else {
-        await svc.addNote(widget.uid, title.isEmpty ? 'Untitled' : title, content);
+        await svc.addNote(
+          widget.uid, t, content,
+          taggedFriendUid: _taggedFriendUid,
+          taggedFriendName: _taggedFriendName,
+        );
       }
       if (mounted) Navigator.pop(context);
     } catch (e) {
@@ -301,5 +466,57 @@ class _NoteEditorSheetState extends State<_NoteEditorSheet> {
         setState(() => _saving = false);
       }
     }
+  }
+}
+
+// ── Friend picker sheet ──────────────────────────────────
+
+class _FriendPickerSheet extends StatelessWidget {
+  final List<Friend> friends;
+  const _FriendPickerSheet({required this.friends});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Handle
+          Center(
+            child: Container(
+              width: 36, height: 4,
+              decoration: BoxDecoration(
+                color: const Color(0xFF3A3A3C),
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          const Text('Tag a Friend',
+              style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
+          const SizedBox(height: 4),
+          Text('Select a friend to tag in this note',
+              style: TextStyle(fontSize: 13, color: Colors.grey[500])),
+          const SizedBox(height: 12),
+          ...friends.map((f) => ListTile(
+            contentPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+            leading: CircleAvatar(
+              backgroundColor: const Color(0xFF3F51B5).withAlpha(40),
+              child: Text(
+                f.displayName.isNotEmpty ? f.displayName[0].toUpperCase() : '?',
+                style: const TextStyle(color: Color(0xFF3F51B5), fontWeight: FontWeight.w700),
+              ),
+            ),
+            title: Text(f.displayName,
+                style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15)),
+            subtitle: Text(f.email,
+                style: TextStyle(color: Colors.grey[500], fontSize: 12)),
+            onTap: () => Navigator.pop(context, f),
+          )),
+        ],
+      ),
+    );
   }
 }

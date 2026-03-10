@@ -47,7 +47,7 @@ String _toGroup(String muscle) {
 
 const _groupColors = {
   'Chest':     Color(0xFFE53935),
-  'Back':      Color(0xFF1A1A2E),
+  'Back':      Color(0xFF3F51B5),
   'Legs':      Color(0xFFEF9A9A),
   'Shoulders': Color(0xFF757575),
   'Arms':      Color(0xFFB71C1C),
@@ -102,7 +102,7 @@ class ProgressBreakdownScreen extends ConsumerWidget {
                     style: TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.w600,
-                        color: Color(0xFF1A1A2E))),
+                        color: Colors.white)),
                 const SizedBox(height: 12),
                 for (final g in ['Chest', 'Back', 'Legs', 'Shoulders'])
                   _MuscleBar(
@@ -117,7 +117,7 @@ class ProgressBreakdownScreen extends ConsumerWidget {
                     style: TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.w600,
-                        color: Color(0xFF1A1A2E))),
+                        color: Colors.white)),
                 const SizedBox(height: 12),
                 for (final g in ['Arms', 'Core'])
                   _MuscleBar(

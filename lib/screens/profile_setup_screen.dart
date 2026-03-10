@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../providers/auth_provider.dart';
+import 'home_screen.dart';
 
 class ProfileSetupScreen extends ConsumerStatefulWidget {
   const ProfileSetupScreen({super.key});
@@ -62,7 +63,13 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
             bio: _bioCtrl.text.trim(),
             gymName: _gymCtrl.text.trim(),
           );
-      // The AuthGate will detect profileComplete = true and navigate to Home
+      if (mounted) {
+        Navigator.pushAndRemoveUntil(
+          context,
+          MaterialPageRoute(builder: (_) => const HomeScreen()),
+          (_) => false,
+        );
+      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -77,7 +84,7 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F6FA),
+      backgroundColor: const Color(0xFF111111),
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 40),
@@ -90,7 +97,7 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
                 height: 56,
                 decoration: BoxDecoration(
                   gradient: const LinearGradient(
-                    colors: [Color(0xFF283593), Color(0xFF5C6BC0)],
+                    colors: [Color(0xFFE53935), Color(0xFFEF9A9A)],
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                   ),
@@ -100,7 +107,7 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
               ),
               const SizedBox(height: 24),
               const Text("Let's set up your profile!",
-                  style: TextStyle(fontSize: 26, fontWeight: FontWeight.w800, color: Color(0xFF1A1A2E))),
+                  style: TextStyle(fontSize: 26, fontWeight: FontWeight.w800, color: Colors.white)),
               const SizedBox(height: 6),
               Text('Help us personalize your GymBro experience.',
                   style: TextStyle(color: Colors.grey[500], fontSize: 15)),
@@ -131,10 +138,10 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
                           duration: const Duration(milliseconds: 180),
                           padding: const EdgeInsets.symmetric(vertical: 14),
                           decoration: BoxDecoration(
-                            color: selected ? color : Colors.white,
+                            color: selected ? color : const Color(0xFF1C1C1E),
                             borderRadius: BorderRadius.circular(14),
                             border: Border.all(
-                              color: selected ? color : Colors.grey.withAlpha(40),
+                              color: selected ? color : const Color(0xFF2C2C2E),
                               width: selected ? 0 : 1,
                             ),
                             boxShadow: selected
@@ -148,7 +155,7 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
                                 style: TextStyle(
                                   fontWeight: FontWeight.w700,
                                   fontSize: 12,
-                                  color: selected ? Colors.white : Colors.grey[600],
+                                  color: selected ? Colors.white : const Color(0xFF9E9E9E),
                                 ),
                                 textAlign: TextAlign.center,
                               ),
@@ -178,7 +185,7 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
                 child: ElevatedButton(
                   onPressed: _loading ? null : _save,
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF3F51B5),
+                    backgroundColor: const Color(0xFFE53935),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                   ),
                   child: _loading
@@ -194,7 +201,7 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
   }
 
   Widget _label(String text) => Text(text,
-      style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14, color: Color(0xFF1A1A2E)));
+      style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14, color: Colors.white));
 
   Widget _textField({
     required TextEditingController controller,
@@ -204,9 +211,9 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
   }) {
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: const Color(0xFF1C1C1E),
         borderRadius: BorderRadius.circular(14),
-        boxShadow: [BoxShadow(color: Colors.black.withAlpha(8), blurRadius: 10, offset: const Offset(0, 2))],
+        boxShadow: [BoxShadow(color: Colors.black.withAlpha(40), blurRadius: 10, offset: const Offset(0, 2))],
       ),
       child: TextField(
         controller: controller,

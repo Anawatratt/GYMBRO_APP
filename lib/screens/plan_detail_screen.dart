@@ -115,6 +115,15 @@ class _PlanDetailScreenState extends State<PlanDetailScreen> {
           .toList(),
     });
 
+    // Update active program so home screen reflects latest
+    final uid2 = FirebaseAuth.instance.currentUser?.uid ?? '';
+    if (uid2.isNotEmpty && _programId != null) {
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(uid2)
+          .update({'active_program_id': _programId});
+    }
+
     setState(() {
       _completedSessions.add(sessionKey);
       _saving = false;
@@ -196,12 +205,12 @@ class _PlanDetailScreenState extends State<PlanDetailScreen> {
                 padding: const EdgeInsets.fromLTRB(16, 14, 16, 4),
                 child: Container(
                   decoration: BoxDecoration(
-                    color: Colors.white,
+                    color: const Color(0xFF1C1C1E),
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: const Color(0xFFCCCCCC), width: 1),
+                    border: Border.all(color: const Color(0xFF2C2C2E), width: 1),
                     boxShadow: [
-                      BoxShadow(color: Colors.black.withAlpha(25), blurRadius: 8, offset: const Offset(0, 4)),
-                      BoxShadow(color: Colors.black.withAlpha(10), blurRadius: 2, offset: const Offset(0, 1)),
+                      BoxShadow(color: Colors.black.withAlpha(60), blurRadius: 8, offset: const Offset(0, 4)),
+                      BoxShadow(color: Colors.black.withAlpha(30), blurRadius: 2, offset: const Offset(0, 1)),
                     ],
                   ),
                   clipBehavior: Clip.antiAlias,
@@ -240,13 +249,13 @@ class _PlanDetailScreenState extends State<PlanDetailScreen> {
                       // ── Binding holes ──
                       Container(
                         height: 10,
-                        color: const Color(0xFFE8E8E8),
+                        color: const Color(0xFF252525),
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                           children: List.generate(18, (_) => Container(
                             width: 7, height: 7,
                             decoration: const BoxDecoration(
-                              color: Color(0xFFBBBBBB),
+                              color: Color(0xFF111111),
                               shape: BoxShape.circle,
                             ),
                           )),
@@ -292,14 +301,14 @@ class _PlanDetailScreenState extends State<PlanDetailScreen> {
                                           ? doneColor.withAlpha(20)
                                           : isToday
                                               ? calRed.withAlpha(10)
-                                              : Colors.grey[50],
+                                              : const Color(0xFF1C1C1E),
                                   borderRadius: BorderRadius.circular(14),
                                   border: Border.all(
                                     color: isSelected
                                         ? calRed
                                         : isToday
                                             ? calRed.withAlpha(100)
-                                            : Colors.grey.shade200,
+                                            : const Color(0xFF2C2C2E),
                                     width: isSelected || isToday ? 2 : 1,
                                   ),
                                   boxShadow: isSelected
@@ -337,7 +346,7 @@ class _PlanDetailScreenState extends State<PlanDetailScreen> {
                                                 ? doneColor
                                                 : isToday
                                                     ? calRed
-                                                    : Colors.black,
+                                                    : const Color(0xFFEEEEEE),
                                       ),
                                     ),
                                     const SizedBox(height: 4),
@@ -354,8 +363,8 @@ class _PlanDetailScreenState extends State<PlanDetailScreen> {
                                               color: isSelected
                                                   ? Colors.white70
                                                   : hasSession
-                                                      ? Colors.grey[600]
-                                                      : Colors.grey[350],
+                                                      ? const Color(0xFF9E9E9E)
+                                                      : const Color(0xFF6B6B6B),
                                             ),
                                             maxLines: 1,
                                             overflow: TextOverflow.ellipsis,
@@ -412,7 +421,7 @@ class _PlanDetailScreenState extends State<PlanDetailScreen> {
                               : _checkedExercises.where((k) => k.startsWith('$sessionKey-')).length /
                                   exercises.length,
                           minHeight: 6,
-                          backgroundColor: Colors.grey[100],
+                          backgroundColor: const Color(0xFF252525),
                           color: const Color(0xFFE53935),
                         ),
                       ),
@@ -444,7 +453,7 @@ class _PlanDetailScreenState extends State<PlanDetailScreen> {
 
                       return Container(
                         decoration: BoxDecoration(
-                          color: isChecked ? Colors.grey[50] : Colors.white,
+                          color: isChecked ? const Color(0xFF252525) : const Color(0xFF1C1C1E),
                           borderRadius: BorderRadius.circular(16),
                           boxShadow: [
                             BoxShadow(
@@ -502,9 +511,9 @@ class _PlanDetailScreenState extends State<PlanDetailScreen> {
                                     placeholder: Container(
                                       width: 140,
                                       height: 120,
-                                      color: Colors.grey[100],
+                                      color: const Color(0xFF252525),
                                       child: Icon(Icons.fitness_center,
-                                          size: 28, color: Colors.grey[400]),
+                                          size: 28, color: const Color(0xFF6B6B6B)),
                                     ),
                                   ),
                                 ),
@@ -544,22 +553,22 @@ class _PlanDetailScreenState extends State<PlanDetailScreen> {
                                           fontWeight: FontWeight.w600,
                                           fontSize: 14,
                                           color: desaturate
-                                              ? Colors.grey[400]
-                                              : const Color(0xFF1A1A2E),
+                                              ? const Color(0xFF6B6B6B)
+                                              : Colors.white,
                                         ),
                                       ),
                                       const SizedBox(height: 4),
                                       Text(
                                         '$sets × $reps  ·  $weightStr',
-                                        style: TextStyle(
-                                            color: Colors.grey[600],
+                                        style: const TextStyle(
+                                            color: Color(0xFF9E9E9E),
                                             fontSize: 12),
                                       ),
                                       if (restSec > 0)
                                         Text(
                                           'Rest ${restSec}s',
-                                          style: TextStyle(
-                                              color: Colors.grey[400],
+                                          style: const TextStyle(
+                                              color: Color(0xFF6B6B6B),
                                               fontSize: 11),
                                         ),
                                     ],
@@ -594,10 +603,10 @@ class _PlanDetailScreenState extends State<PlanDetailScreen> {
                 Container(
                   padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
                   decoration: BoxDecoration(
-                    color: Colors.white,
+                    color: const Color(0xFF161618),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.black.withAlpha(8),
+                        color: Colors.black.withAlpha(60),
                         blurRadius: 8,
                         offset: const Offset(0, -2),
                       ),
@@ -661,11 +670,11 @@ class _RestDayContent extends StatelessWidget {
         children: [
           Container(
             padding: const EdgeInsets.all(24),
-            decoration: BoxDecoration(
-              color: Colors.grey[100],
+            decoration: const BoxDecoration(
+              color: Color(0xFF252525),
               shape: BoxShape.circle,
             ),
-            child: Icon(Icons.hotel_rounded, size: 48, color: Colors.grey[400]),
+            child: Icon(Icons.hotel_rounded, size: 48, color: Colors.grey[500]),
           ),
           const SizedBox(height: 20),
           Text(
@@ -673,7 +682,7 @@ class _RestDayContent extends StatelessWidget {
             style: const TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.w700,
-              color: Color(0xFF1A1A2E),
+              color: Colors.white,
             ),
           ),
           const SizedBox(height: 8),
@@ -690,7 +699,7 @@ class _RestDayContent extends StatelessWidget {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
             decoration: BoxDecoration(
-              color: Colors.grey[200],
+              color: const Color(0xFF252525),
               borderRadius: BorderRadius.circular(20),
             ),
             child: Text(
@@ -804,9 +813,9 @@ class _SlideToLogState extends State<_SlideToLog>
         child: Container(
           height: trackH,
           decoration: BoxDecoration(
-            color: Colors.grey[100],
+            color: const Color(0xFF1C1C1E),
             borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: Colors.grey.shade200),
+            border: Border.all(color: const Color(0xFF2C2C2E)),
           ),
           child: Stack(
             children: [
@@ -825,13 +834,13 @@ class _SlideToLogState extends State<_SlideToLog>
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(Icons.arrow_forward_ios_rounded,
-                          size: 13, color: Colors.grey[400]),
+                      const Icon(Icons.arrow_forward_ios_rounded,
+                          size: 13, color: Color(0xFF6B6B6B)),
                       const SizedBox(width: 6),
                       Text(
                         widget.isSaving ? 'Logging...' : 'Slide to Log Workout',
-                        style: TextStyle(
-                          color: Colors.grey[500],
+                        style: const TextStyle(
+                          color: Color(0xFF9E9E9E),
                           fontWeight: FontWeight.w600,
                           fontSize: 14,
                         ),

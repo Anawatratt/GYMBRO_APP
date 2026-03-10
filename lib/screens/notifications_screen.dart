@@ -17,7 +17,7 @@ class NotificationsScreen extends ConsumerWidget {
       appBar: AppBar(
         title: const Text('Notifications'),
         actions: [
-          if (notifications.any((n) => n.read))
+          if (notifications.any((n) => !n.read))
             TextButton(
               onPressed: () async {
                 if (me == null) return;
@@ -57,8 +57,9 @@ class NotificationsScreen extends ConsumerWidget {
                   onAccept: n.type == 'friend_request' && !n.actionDone && me != null
                       ? () async {
                           await ref.read(notificationServiceProvider).markActionDone(me.uid, n.id);
+                          final myName = me.displayName.isNotEmpty ? me.displayName : me.email.split('@').first;
                           await ref.read(friendServiceProvider).acceptRequest(
-                                me.uid, me.displayName, n.fromUserId, n.fromUserName);
+                                me.uid, myName, n.fromUserId, n.fromUserName);
                           if (context.mounted) {
                             ScaffoldMessenger.of(context).showSnackBar(
                               SnackBar(content: Text('You and ${n.fromUserName} are now GymBros! 💪'), backgroundColor: const Color(0xFF3F51B5)),
@@ -135,7 +136,7 @@ class _NotificationTile extends StatelessWidget {
         margin: const EdgeInsets.only(bottom: 10),
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
-          color: unread ? _color.withAlpha(10) : Colors.white,
+          color: unread ? _color.withAlpha(10) : const Color(0xFF1C1C1E),
           borderRadius: BorderRadius.circular(14),
           border: unread ? Border.all(color: _color.withAlpha(40), width: 1) : null,
         ),
@@ -165,7 +166,7 @@ class _NotificationTile extends StatelessWidget {
                                 style: TextStyle(
                                     fontWeight: unread ? FontWeight.w700 : FontWeight.w600,
                                     fontSize: 14,
-                                    color: const Color(0xFF1A1A2E))),
+                                    color: Colors.white)),
                           ),
                           if (unread)
                             Container(

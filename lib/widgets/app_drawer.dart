@@ -3,7 +3,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/auth_provider.dart';
 import '../providers/notification_provider.dart';
 import '../screens/friends_screen.dart';
+import '../screens/login_screen.dart';
 import '../screens/notifications_screen.dart';
+import '../providers/friend_provider.dart';
+import '../screens/progress_analytics_screen.dart';
 
 class AppDrawer extends ConsumerWidget {
   const AppDrawer({super.key});
@@ -13,6 +16,11 @@ class AppDrawer extends ConsumerWidget {
     final width = MediaQuery.of(context).size.width * 0.78;
     final user = ref.watch(currentUserDocProvider).value;
     final unread = ref.watch(unreadCountProvider);
+    final acceptedFriends = (ref.watch(friendsStreamProvider).value ?? [])
+        .where((f) => f.status == 'accepted')
+        .toList()
+      ..sort((a, b) => (a.acceptedAt ?? a.addedAt)
+          .compareTo(b.acceptedAt ?? b.addedAt));
 
     return Drawer(
       width: width,
@@ -22,7 +30,7 @@ class AppDrawer extends ConsumerWidget {
           bottomRight: Radius.circular(18),
         ),
         child: Material(
-          color: Colors.white,
+          color: const Color(0xFF161618),
           child: SafeArea(
             child: Padding(
               padding: const EdgeInsets.only(top: 24),
@@ -103,13 +111,10 @@ class AppDrawer extends ConsumerWidget {
                             Navigator.pushNamed(context, '/plans');
                           },
                         ),
-                        _MenuItemTile(
-                          icon: Icons.bar_chart_rounded,
-                          title: 'Progress',
-                          onTap: () {
-                            Navigator.pop(context);
-                            Navigator.pushNamed(context, '/progressAnalytics');
-                          },
+                        _ProgressExpansionTile(
+                          user: user,
+                          friends: acceptedFriends,
+                          onNavigate: () => Navigator.pop(context),
                         ),
                         _MenuItemTile(
                           icon: Icons.sticky_note_2_rounded,
@@ -117,14 +122,6 @@ class AppDrawer extends ConsumerWidget {
                           onTap: () {
                             Navigator.pop(context);
                             Navigator.pushNamed(context, '/notes');
-                          },
-                        ),
-                        _MenuItemTile(
-                          icon: Icons.history_rounded,
-                          title: 'Workout History',
-                          onTap: () {
-                            Navigator.pop(context);
-                            Navigator.pushNamed(context, '/workoutHistory');
                           },
                         ),
                         const Divider(height: 24),
@@ -168,11 +165,18 @@ class AppDrawer extends ConsumerWidget {
                             onPressed: () async {
                               Navigator.pop(context);
                               await ref.read(authServiceProvider).signOut();
+                              if (context.mounted) {
+                                Navigator.pushAndRemoveUntil(
+                                  context,
+                                  MaterialPageRoute(builder: (_) => const LoginScreen()),
+                                  (_) => false,
+                                );
+                              }
                             },
                             icon: const Icon(Icons.logout,
-                                color: Colors.black54),
+                                color: Color(0xFF9E9E9E)),
                             label: const Text('Logout',
-                                style: TextStyle(color: Colors.black87)),
+                                style: TextStyle(color: Colors.white)),
                             style: TextButton.styleFrom(
                                 alignment: Alignment.centerLeft),
                           ),
@@ -204,7 +208,7 @@ class _MenuItemTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ListTile(
-      leading: Icon(icon, color: Colors.black87),
+      leading: Icon(icon, color: Colors.white),
       title: Text(title,
           style:
               const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
@@ -238,7 +242,7 @@ class _MenuItemTileWithBadge extends StatelessWidget {
       leading: Stack(
         clipBehavior: Clip.none,
         children: [
-          Icon(icon, color: Colors.black87),
+          Icon(icon, color: Colors.white),
           if (badge > 0)
             Positioned(
               right: -6,
@@ -269,6 +273,133 @@ class _MenuItemTileWithBadge extends StatelessWidget {
           const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
       dense: true,
       visualDensity: VisualDensity.compact,
+    );
+  }
+}
+
+// ── Progress expansion tile ───────────────────────────────
+
+class _ProgressExpansionTile extends StatelessWidget {
+  final dynamic user;
+  final List<dynamic> friends;
+  final VoidCallback onNavigate;
+
+  const _ProgressExpansionTile({
+    required this.user,
+    required this.friends,
+    required this.onNavigate,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Theme(
+      data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+      child: ExpansionTile(
+        leading: const Icon(Icons.bar_chart_rounded, color: Colors.white),
+        title: const Text(
+          'Progress',
+          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+        ),
+        tilePadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 0),
+        childrenPadding: const EdgeInsets.only(left: 16, right: 8, bottom: 4),
+        iconColor: const Color(0xFF9E9E9E),
+        collapsedIconColor: const Color(0xFF6B6B6B),
+        children: [
+          _SubTile(
+            initial: (user?.displayName as String?)?.isNotEmpty == true
+                ? (user.displayName as String)[0].toUpperCase()
+                : '?',
+            name: (user?.displayName as String?) ?? 'Me',
+            label: 'Me',
+            onTap: () {
+              onNavigate();
+              Navigator.pushNamed(context, '/progressAnalytics');
+            },
+          ),
+          ...friends.map((f) {
+            final name = (f.displayName as String?) ?? '';
+            return _SubTile(
+              initial: name.isNotEmpty ? name[0].toUpperCase() : '?',
+              name: name,
+              onTap: () {
+                onNavigate();
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => ProgressAnalyticsScreen(
+                        viewUid: f.friendUid as String),
+                  ),
+                );
+              },
+            );
+          }),
+        ],
+      ),
+    );
+  }
+}
+
+class _SubTile extends StatelessWidget {
+  final String initial;
+  final String name;
+  final String? label;
+  final VoidCallback onTap;
+
+  const _SubTile({
+    required this.initial,
+    required this.name,
+    required this.onTap,
+    this.label,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(10),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 7),
+        child: Row(
+          children: [
+            CircleAvatar(
+              radius: 14,
+              backgroundColor: const Color(0xFFE53935).withAlpha(20),
+              child: Text(
+                initial,
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: Color(0xFFE53935),
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                name,
+                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            if (label != null)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFE53935).withAlpha(15),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text(
+                  label!,
+                  style: const TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xFFE53935),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
     );
   }
 }

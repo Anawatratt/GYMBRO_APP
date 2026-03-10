@@ -15,18 +15,33 @@ class NoteService {
             snap.docs.map((d) => Note.fromMap(d.id, d.data())).toList());
   }
 
-  Future<void> addNote(String uid, String title, String content) async {
+  Future<void> addNote(
+    String uid,
+    String title,
+    String content, {
+    String? taggedFriendUid,
+    String? taggedFriendName,
+  }) async {
     final now = FieldValue.serverTimestamp();
     await _db.collection('users').doc(uid).collection('notes').add({
       'title': title,
       'content': content,
       'createdAt': now,
       'updatedAt': now,
+      ?'taggedFriendUid': taggedFriendUid,
+      ?'taggedFriendName': taggedFriendName,
     });
   }
 
   Future<void> updateNote(
-      String uid, String noteId, String title, String content) async {
+    String uid,
+    String noteId,
+    String title,
+    String content, {
+    String? taggedFriendUid,
+    String? taggedFriendName,
+    bool clearTag = false,
+  }) async {
     await _db
         .collection('users')
         .doc(uid)
@@ -36,6 +51,13 @@ class NoteService {
       'title': title,
       'content': content,
       'updatedAt': FieldValue.serverTimestamp(),
+      if (clearTag) ...{
+        'taggedFriendUid': FieldValue.delete(),
+        'taggedFriendName': FieldValue.delete(),
+      } else if (taggedFriendUid != null) ...{
+        'taggedFriendUid': taggedFriendUid,
+        'taggedFriendName': taggedFriendName,
+      },
     });
   }
 

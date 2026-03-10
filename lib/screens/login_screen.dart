@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../app_state.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import '../providers/auth_provider.dart';
+import 'home_screen.dart';
+import 'profile_setup_screen.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
@@ -36,6 +40,27 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           backgroundColor: Colors.red[400],
         ),
       );
+      return;
+    }
+
+    if (!mounted) return;
+    // Check profileComplete to decide where to go
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+    final appUser = await ref.read(userServiceProvider).getUserOnce(uid);
+    if (!mounted) return;
+    if (appUser == null || !appUser.profileComplete) {
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(builder: (_) => const ProfileSetupScreen()),
+        (_) => false,
+      );
+    } else {
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(builder: (_) => const HomeScreen()),
+        (_) => false,
+      );
     }
   }
 
@@ -55,7 +80,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     final loading = authState.isLoading;
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F6FA),
+      backgroundColor: const Color(0xFF111111),
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
@@ -85,7 +110,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   style: TextStyle(
                     fontSize: 32,
                     fontWeight: FontWeight.w900,
-                    color: Color(0xFF1A1A2E),
+                    color: Colors.white,
                     letterSpacing: -0.5,
                   ),
                 ),
@@ -106,7 +131,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     labelText: 'Username',
                     prefixIcon: const Icon(Icons.person_outline),
                     filled: true,
-                    fillColor: Colors.white,
+                    fillColor: const Color(0xFF1C1C1E),
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(14),
                       borderSide: BorderSide.none,
@@ -130,7 +155,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                       onPressed: () => setState(() => _obscure = !_obscure),
                     ),
                     filled: true,
-                    fillColor: Colors.white,
+                    fillColor: const Color(0xFF1C1C1E),
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(14),
                       borderSide: BorderSide.none,

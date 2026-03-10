@@ -11,7 +11,7 @@ class SearchScreen extends StatelessWidget {
     return DefaultTabController(
       length: 2,
       child: Scaffold(
-        backgroundColor: const Color(0xFFF5F5F5),
+        backgroundColor: const Color(0xFF111111),
         appBar: AppBar(
           title: const Text('Search'),
           bottom: const TabBar(
@@ -110,7 +110,7 @@ class _ExercisesTabState extends State<_ExercisesTab> {
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 20),
             child: SizedBox(
-              height: 30,
+              height: 40,
               child: ListView(
                 scrollDirection: Axis.horizontal,
                 children: [
@@ -481,11 +481,11 @@ class _SearchBar extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: const Color(0xFF1C1C1E),
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withAlpha(8),
+            color: Colors.black.withAlpha(40),
             blurRadius: 8,
             offset: const Offset(0, 2),
           ),
@@ -495,10 +495,10 @@ class _SearchBar extends StatelessWidget {
         onChanged: onChanged,
         decoration: InputDecoration(
           hintText: hint,
-          hintStyle: TextStyle(color: Colors.grey[400]),
-          prefixIcon: Icon(Icons.search, color: Colors.grey[400]),
+          hintStyle: TextStyle(color: Colors.grey[500]),
+          prefixIcon: Icon(Icons.search, color: Colors.grey[500]),
           filled: true,
-          fillColor: Colors.white,
+          fillColor: const Color(0xFF1C1C1E),
           contentPadding: const EdgeInsets.symmetric(vertical: 14),
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(16),
@@ -546,10 +546,10 @@ class _FilterChip extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
         decoration: BoxDecoration(
-          color: isActive ? const Color(0xFFE53935) : Colors.white,
+          color: isActive ? const Color(0xFFE53935) : const Color(0xFF1C1C1E),
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
-            color: isActive ? const Color(0xFFE53935) : Colors.grey.shade300,
+            color: isActive ? const Color(0xFFE53935) : const Color(0xFF2C2C2E),
           ),
         ),
         child: Row(
@@ -558,7 +558,7 @@ class _FilterChip extends StatelessWidget {
             Icon(
               icon,
               size: 16,
-              color: isActive ? Colors.white : Colors.grey[600],
+              color: isActive ? Colors.white : Colors.grey[500],
             ),
             const SizedBox(width: 6),
             Text(
@@ -570,14 +570,14 @@ class _FilterChip extends StatelessWidget {
               style: TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.w600,
-                color: isActive ? Colors.white : Colors.grey[700],
+                color: isActive ? Colors.white : Colors.grey[400],
               ),
             ),
             const SizedBox(width: 4),
             Icon(
               Icons.keyboard_arrow_down,
               size: 18,
-              color: isActive ? Colors.white : Colors.grey[600],
+              color: isActive ? Colors.white : Colors.grey[500],
             ),
           ],
         ),
@@ -609,79 +609,69 @@ class _ExerciseCard extends StatelessWidget {
         _showExerciseDetail(context);
       },
       child: Container(
-        height: 160,
+        height: 100,
         decoration: BoxDecoration(
-          color: Colors.grey[200],
+          color: const Color(0xFF1C1C1E),
           borderRadius: BorderRadius.circular(18),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withAlpha(12),
+              color: Colors.black.withAlpha(30),
               blurRadius: 10,
               offset: const Offset(0, 3),
             ),
           ],
         ),
         clipBehavior: Clip.antiAlias,
-        child: Stack(
-          fit: StackFit.expand,
+        child: Row(
           children: [
-            // Full image
-            StorageImage(
-              key: ValueKey(docId),
-              storagePath: exerciseImagePath(docId),
-              width: double.infinity,
-              height: 160,
-              fit: BoxFit.cover,
-              cropTop: 40,
-              placeholder: Container(
-                color: Colors.grey[100],
-                child: Icon(
-                  isCompound ? Icons.fitness_center : Icons.track_changes,
-                  size: 40,
-                  color: Colors.grey[400],
+            // Left: image
+            SizedBox(
+              width: 110,
+              height: 100,
+              child: StorageImage(
+                key: ValueKey(docId),
+                storagePath: exerciseImagePath(docId),
+                width: 110,
+                height: 100,
+                fit: BoxFit.cover,
+                alignment: Alignment.topCenter,
+                cropTop: 20,
+                placeholder: Container(
+                  color: const Color(0xFF252525),
+                  child: Icon(
+                    isCompound ? Icons.fitness_center : Icons.track_changes,
+                    size: 32,
+                    color: const Color(0xFF6B6B6B),
+                  ),
                 ),
               ),
             ),
-            // Subtle gradient at bottom
-            Positioned(
-              bottom: 0,
-              left: 0,
-              right: 0,
-              child: Container(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.bottomCenter,
-                    end: Alignment.topCenter,
-                    colors: [
-                      Colors.black.withOpacity(0.55),
-                      Colors.transparent,
-                    ],
-                    stops: const [0.0, 1.0],
-                  ),
-                ),
-                padding: const EdgeInsets.fromLTRB(12, 28, 12, 12),
+            // Right: info
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
+                  mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    // Tags
-                    Row(
-                      children: [
-                        _overlayPill(_capitalize(diff)),
-                        const SizedBox(width: 6),
-                        _overlayPill(_capitalize(moveType)),
-                      ],
-                    ),
-                    const SizedBox(height: 5),
-                    // Name
                     Text(
                       name,
                       style: const TextStyle(
                         color: Colors.white,
-                        fontSize: 15,
+                        fontSize: 14,
                         fontWeight: FontWeight.w700,
-                        shadows: [Shadow(color: Colors.black54, blurRadius: 4)],
                       ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 4,
+                      children: [
+                        if (diff.isNotEmpty) _pill(_capitalize(diff)),
+                        if (moveType.isNotEmpty) _pill(_capitalize(moveType)),
+                      ],
                     ),
                   ],
                 ),
@@ -693,17 +683,17 @@ class _ExerciseCard extends StatelessWidget {
     );
   }
 
-  Widget _mutedPill(String text) {
+  Widget _pill(String text) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
-        color: Colors.grey[100],
-        borderRadius: BorderRadius.circular(20),
+        color: const Color(0xFF2C2C2E),
+        borderRadius: BorderRadius.circular(8),
       ),
       child: Text(
         text,
-        style: TextStyle(
-          color: Colors.grey[600],
+        style: const TextStyle(
+          color: Color(0xFF9E9E9E),
           fontSize: 11,
           fontWeight: FontWeight.w600,
         ),
@@ -711,17 +701,17 @@ class _ExerciseCard extends StatelessWidget {
     );
   }
 
-  Widget _overlayPill(String text) {
+  Widget _mutedPill(String text) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
-        color: Colors.black.withOpacity(0.38),
+        color: const Color(0xFF252525),
         borderRadius: BorderRadius.circular(20),
       ),
       child: Text(
         text,
         style: const TextStyle(
-          color: Colors.white,
+          color: Color(0xFF9E9E9E),
           fontSize: 11,
           fontWeight: FontWeight.w600,
         ),
@@ -757,7 +747,7 @@ class _ExerciseCard extends StatelessWidget {
                 width: 40,
                 height: 4,
                 decoration: BoxDecoration(
-                  color: Colors.grey[300],
+                  color: const Color(0xFF3A3A3C),
                   borderRadius: BorderRadius.circular(2),
                 ),
               ),
@@ -768,7 +758,7 @@ class _ExerciseCard extends StatelessWidget {
               style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800),
             ),
             const SizedBox(height: 6),
-            Text(desc, style: TextStyle(color: Colors.grey[600], fontSize: 14)),
+            Text(desc, style: TextStyle(color: Colors.grey[500], fontSize: 14)),
             const SizedBox(height: 12),
             Row(
               children: [
@@ -802,7 +792,7 @@ class _ExerciseCard extends StatelessWidget {
                         child: LinearProgressIndicator(
                           value: pct / 100,
                           minHeight: 8,
-                          backgroundColor: Colors.grey[200],
+                          backgroundColor: const Color(0xFF2C2C2E),
                           valueColor: AlwaysStoppedAnimation(
                             _involvementColor(m['involvement_type'] ?? ''),
                           ),
@@ -832,7 +822,7 @@ class _ExerciseCard extends StatelessWidget {
                   final name = e['equipment_name'] as String? ?? '';
                   return Chip(
                     label: Text(name, style: const TextStyle(fontSize: 13)),
-                    backgroundColor: Colors.grey[100],
+                    backgroundColor: const Color(0xFF252525),
                   );
                 }).toList(),
               ),
@@ -882,17 +872,18 @@ class _MachineCard extends StatelessWidget {
     }
   }
 
-  Widget _overlayPill(String text) {
+
+  Widget _pill(String text) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
-        color: Colors.black.withOpacity(0.38),
-        borderRadius: BorderRadius.circular(20),
+        color: const Color(0xFF2C2C2E),
+        borderRadius: BorderRadius.circular(8),
       ),
       child: Text(
         text,
         style: const TextStyle(
-          color: Colors.white,
+          color: Color(0xFF9E9E9E),
           fontSize: 11,
           fontWeight: FontWeight.w600,
         ),
@@ -906,65 +897,59 @@ class _MachineCard extends StatelessWidget {
     final type = data['equipment_type'] ?? '';
 
     return Container(
-      height: 160,
+      height: 100,
       decoration: BoxDecoration(
-        color: Colors.grey[200],
+        color: const Color(0xFF1C1C1E),
         borderRadius: BorderRadius.circular(18),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withAlpha(12),
+            color: Colors.black.withAlpha(30),
             blurRadius: 10,
             offset: const Offset(0, 3),
           ),
         ],
       ),
       clipBehavior: Clip.antiAlias,
-      child: Stack(
-        fit: StackFit.expand,
+      child: Row(
         children: [
-          // Full image
-          StorageImage(
-            key: ValueKey(docId),
-            storagePath: machineImagePath(docId),
-            width: double.infinity,
-            height: 160,
-            fit: BoxFit.cover,
-            cropTop: 40,
-            placeholder: Container(
-              color: Colors.grey[100],
-              child: Icon(_typeIcon(type), size: 40, color: Colors.grey[400]),
+          // Left: image
+          SizedBox(
+            width: 110,
+            height: 100,
+            child: StorageImage(
+              key: ValueKey(docId),
+              storagePath: machineImagePath(docId),
+              width: 110,
+              height: 100,
+              fit: BoxFit.cover,
+              alignment: Alignment.topCenter,
+              cropTop: 20,
+              placeholder: Container(
+                color: const Color(0xFF252525),
+                child: Icon(_typeIcon(type), size: 32, color: const Color(0xFF6B6B6B)),
+              ),
             ),
           ),
-          // Subtle gradient at bottom
-          Positioned(
-            bottom: 0,
-            left: 0,
-            right: 0,
-            child: Container(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.bottomCenter,
-                  end: Alignment.topCenter,
-                  colors: [Colors.black.withOpacity(0.55), Colors.transparent],
-                  stops: const [0.0, 1.0],
-                ),
-              ),
-              padding: const EdgeInsets.fromLTRB(12, 28, 12, 12),
+          // Right: info
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
+                mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  _overlayPill(_formatSnakeCase(type)),
-                  const SizedBox(height: 5),
                   Text(
                     name,
                     style: const TextStyle(
                       color: Colors.white,
-                      fontSize: 15,
+                      fontSize: 14,
                       fontWeight: FontWeight.w700,
-                      shadows: [Shadow(color: Colors.black54, blurRadius: 4)],
                     ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
                   ),
+                  const SizedBox(height: 8),
+                  if (type.isNotEmpty) _pill(_formatSnakeCase(type)),
                 ],
               ),
             ),

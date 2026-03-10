@@ -15,7 +15,8 @@
       "Bash(dart:*)",
       "Bash(flutter config:*)",
       "Bash(rm -rf /c/Users/ASUS/AppData/Local/Android/Sdk/ndk/29.0.14206865/)",
-      "Read(//c/Users/ASUS/AppData/Local/Android/Sdk/ndk//**)"
+      "Read(//c/Users/ASUS/AppData/Local/Android/Sdk/ndk//**)",
+      "Bash(node:*)"
     ]
   }
 }

@@ -38,34 +38,39 @@ class GymbroApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       title: 'Gymbro',
       theme: ThemeData(
-        useMaterial3: true,
-        colorSchemeSeed: const Color(0xFFE53935),
-        brightness: Brightness.light,
-        scaffoldBackgroundColor: const Color(0xFFF5F6FA),
+        brightness: Brightness.dark,
+        scaffoldBackgroundColor: const Color(0xFF111111),
+        colorScheme: ColorScheme.dark(
+          primary: const Color(0xFFE53935),
+          secondary: const Color(0xFFE53935),
+          surface: const Color(0xFF1C1C1E),
+        ),
         appBarTheme: const AppBarTheme(
-          backgroundColor: Colors.transparent,
-          foregroundColor: Color(0xFF1A1A2E),
+          backgroundColor: Color(0xFF161618),
+          foregroundColor: Colors.white,
           elevation: 0,
-          centerTitle: false,
-          titleTextStyle: TextStyle(
-            color: Color(0xFF1A1A2E), fontSize: 20, fontWeight: FontWeight.w700),
+          surfaceTintColor: Colors.transparent,
         ),
-        cardTheme: CardThemeData(
-          elevation: 0,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          color: Colors.white,
+        cardTheme: const CardThemeData(color: Color(0xFF1C1C1E)),
+        inputDecorationTheme: InputDecorationTheme(
+          filled: true,
+          fillColor: const Color(0xFF1C1C1E),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: const BorderSide(color: Color(0xFF2C2C2E)),
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: const BorderSide(color: Color(0xFF2C2C2E)),
+          ),
         ),
+        drawerTheme: const DrawerThemeData(backgroundColor: Color(0xFF161618)),
+        dividerTheme: const DividerThemeData(color: Color(0xFF2C2C2E)),
         elevatedButtonTheme: ElevatedButtonThemeData(
           style: ElevatedButton.styleFrom(
             backgroundColor: const Color(0xFFE53935),
             foregroundColor: Colors.white,
-            elevation: 0,
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
           ),
-        ),
-        textButtonTheme: TextButtonThemeData(
-          style: TextButton.styleFrom(foregroundColor: const Color(0xFFE53935)),
         ),
       ),
       home: const AuthGate(),

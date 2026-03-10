@@ -85,7 +85,7 @@ String _fmt(String s) => s
 
 const _groupColors = {
   'Chest':     Color(0xFFE53935),
-  'Back':      Color(0xFF1A1A2E),
+  'Back':      Color(0xFF3F51B5),
   'Legs':      Color(0xFFEF9A9A),
   'Shoulders': Color(0xFF757575),
   'Arms':      Color(0xFFB71C1C),
@@ -133,7 +133,6 @@ class ProgressAnalyticsScreen extends ConsumerStatefulWidget {
 class _ProgressAnalyticsScreenState
     extends ConsumerState<ProgressAnalyticsScreen> {
   int _touchedIndex = -1;
-  bool _showSecondary = false;
   _TimeFrame _timeFrame = _TimeFrame.month;
 
   @override
@@ -310,7 +309,7 @@ class _ProgressAnalyticsScreenState
   ) {
     final filtered = _filterHistory(history);
 
-    final groupSets = _computeGroupSets(filtered, exMap, _showSecondary);
+    final groupSets = _computeGroupSets(filtered, exMap, false);
     final volumeSpots = _computeVolumeTimeline(filtered, _timeFrame);
     final totalVolume = _computeTotalVolume(filtered);
 
@@ -337,7 +336,7 @@ class _ProgressAnalyticsScreenState
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: const Color(0xFF1C1C1E),
             borderRadius: BorderRadius.circular(14),
           ),
           child: Row(
@@ -380,7 +379,7 @@ class _ProgressAnalyticsScreenState
         Container(
           padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8),
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: const Color(0xFF1C1C1E),
             borderRadius: BorderRadius.circular(16),
           ),
           child: IntrinsicHeight(
@@ -390,13 +389,13 @@ class _ProgressAnalyticsScreenState
                   color: const Color(0xFFE53935),
                   value: '$totalSessions',
                   label: 'Sessions')),
-              VerticalDivider(width: 1, thickness: 1, color: Colors.grey[200]),
+              VerticalDivider(width: 1, thickness: 1, color: const Color(0xFF2C2C2E)),
               Expanded(child: _StatTile(
                   icon: Icons.fitness_center,
                   color: const Color(0xFF444444),
                   value: '$totalExercises',
                   label: 'Exercises')),
-              VerticalDivider(width: 1, thickness: 1, color: Colors.grey[200]),
+              VerticalDivider(width: 1, thickness: 1, color: const Color(0xFF2C2C2E)),
               Expanded(child: _StatTile(
                   icon: Icons.bolt,
                   color: const Color(0xFFE53935),
@@ -420,10 +419,7 @@ class _ProgressAnalyticsScreenState
                 groupSets: groupSets,
                 ordered: ordered,
                 touchedIndex: _touchedIndex,
-                showSecondary: _showSecondary,
                 onTouch: (i) => setState(() => _touchedIndex = i),
-                onSecondaryToggle: (v) =>
-                    setState(() => _showSecondary = v),
               ),
             ),
             const SizedBox(width: 10),
@@ -448,7 +444,13 @@ class _ProgressAnalyticsScreenState
         // Workout History
         const _SectionHeader(title: 'Workout History'),
         const SizedBox(height: 14),
-        ...history.map((s) => _HistoryCard(data: s)),
+        ...history.take(5).map((s) => _HistoryCard(data: s)),
+        if (history.length > 5)
+          TextButton(
+            onPressed: () => Navigator.pushNamed(context, '/workoutHistory'),
+            child: const Text('See all',
+                style: TextStyle(color: Color(0xFFE53935), fontSize: 14)),
+          ),
       ],
     );
   }
@@ -483,7 +485,7 @@ class _ProgressAnalyticsScreenState
               style: const TextStyle(
                   fontSize: 17,
                   fontWeight: FontWeight.w800,
-                  color: Color(0xFF1A1A2E))),
+                  color: Colors.white)),
           const SizedBox(height: 2),
           Text('Real-time from workout logs',
               style: TextStyle(color: Colors.grey[500], fontSize: 13)),
@@ -511,17 +513,13 @@ class _CompactDonutCard extends StatelessWidget {
   final Map<String, int> groupSets;
   final List<String> ordered;
   final int touchedIndex;
-  final bool showSecondary;
   final ValueChanged<int> onTouch;
-  final ValueChanged<bool> onSecondaryToggle;
 
   const _CompactDonutCard({
     required this.groupSets,
     required this.ordered,
     required this.touchedIndex,
-    required this.showSecondary,
     required this.onTouch,
-    required this.onSecondaryToggle,
   });
 
   @override
@@ -550,11 +548,11 @@ class _CompactDonutCard extends StatelessWidget {
 
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: const Color(0xFF1C1C1E),
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-              color: Colors.black.withAlpha(8),
+              color: Colors.black.withAlpha(40),
               blurRadius: 10,
               offset: const Offset(0, 3)),
         ],
@@ -569,32 +567,13 @@ class _CompactDonutCard extends StatelessWidget {
             style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.bold,
-                color: Color(0xFF1A1A2E)),
-          ),
-          const SizedBox(height: 4),
-          // Secondary toggle
-          Row(
-            children: [
-              Text('Secondary',
-                  style: TextStyle(fontSize: 10, color: Colors.grey[500])),
-              const SizedBox(width: 4),
-              Transform.scale(
-                scale: 0.7,
-                alignment: Alignment.centerLeft,
-                child: Switch.adaptive(
-                  value: showSecondary,
-                  activeColor: const Color(0xFFE53935),
-                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  onChanged: onSecondaryToggle,
-                ),
-              ),
-            ],
+                color: Colors.white),
           ),
           const SizedBox(height: 4),
           // Donut chart
           if (groupSets.isEmpty)
             const SizedBox(
-              height: 160,
+              height: 140,
               child: Center(
                 child: Text('No data',
                     style: TextStyle(color: Colors.grey, fontSize: 12)),
@@ -602,7 +581,7 @@ class _CompactDonutCard extends StatelessWidget {
             )
           else
             SizedBox(
-              height: 160,
+              height: 140,
               child: Stack(
                 alignment: Alignment.center,
                 children: [
@@ -673,11 +652,11 @@ class _AreaChartCard extends StatelessWidget {
 
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: const Color(0xFF1C1C1E),
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-              color: Colors.black.withAlpha(8),
+              color: Colors.black.withAlpha(40),
               blurRadius: 10,
               offset: const Offset(0, 3)),
         ],
@@ -690,10 +669,10 @@ class _AreaChartCard extends StatelessWidget {
               style: TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.bold,
-                  color: Color(0xFF1A1A2E))),
+                  color: Colors.white)),
           const SizedBox(height: 8),
           SizedBox(
-            height: 148,
+            height: 140,
             child: hasData
                 ? LineChart(
                     LineChartData(
@@ -780,7 +759,7 @@ class _AreaChartCard extends StatelessWidget {
                       lineTouchData: LineTouchData(
                         touchTooltipData: LineTouchTooltipData(
                           getTooltipColor: (_) =>
-                              const Color(0xFF1A1A2E).withAlpha(220),
+                              Colors.black.withAlpha(220),
                           getTooltipItems: (touchedSpots) => touchedSpots
                               .map((s) => LineTooltipItem(
                                     _formatY(s.y),
@@ -826,11 +805,11 @@ class _VolumeBreakdownCard extends StatelessWidget {
 
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: const Color(0xFF1C1C1E),
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-              color: Colors.black.withAlpha(8),
+              color: Colors.black.withAlpha(40),
               blurRadius: 10,
               offset: const Offset(0, 3)),
         ],
@@ -844,7 +823,7 @@ class _VolumeBreakdownCard extends StatelessWidget {
             style: TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.w700,
-                color: Color(0xFF1A1A2E)),
+                color: Colors.white),
           ),
           const SizedBox(height: 14),
           ...ordered.asMap().entries.map((entry) {
@@ -883,7 +862,7 @@ class _VolumeBreakdownCard extends StatelessWidget {
                                   fontWeight: isSelected
                                       ? FontWeight.bold
                                       : FontWeight.w500,
-                                  color: const Color(0xFF1A1A2E))),
+                                  color: Colors.white)),
                         ]),
                         Row(children: [
                           Text('$sets sets',
@@ -934,7 +913,7 @@ class _SectionHeader extends StatelessWidget {
       style: const TextStyle(
           fontSize: 15,
           fontWeight: FontWeight.w700,
-          color: Color(0xFF1A1A2E)));
+          color: Colors.white));
 }
 
 class _StatTile extends StatelessWidget {
@@ -966,7 +945,7 @@ class _StatTile extends StatelessWidget {
                 style: const TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.w800,
-                    color: Color(0xFF1A1A2E))),
+                    color: Colors.white)),
             const SizedBox(height: 2),
             Text(label,
                 style: TextStyle(color: Colors.grey[500], fontSize: 11),
@@ -1008,11 +987,11 @@ class _HistoryCardState extends State<_HistoryCard> {
         margin: const EdgeInsets.only(bottom: 10),
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: const Color(0xFF1C1C1E),
           borderRadius: BorderRadius.circular(18),
           boxShadow: [
             BoxShadow(
-                color: Colors.black.withAlpha(10),
+                color: Colors.black.withAlpha(40),
                 blurRadius: 8,
                 offset: const Offset(0, 2))
           ],
@@ -1044,7 +1023,7 @@ class _HistoryCardState extends State<_HistoryCard> {
                 padding:
                     const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
                 decoration: BoxDecoration(
-                    color: Colors.grey[100],
+                    color: const Color(0xFF252525),
                     borderRadius: BorderRadius.circular(20)),
                 child: Text('${exercises.length} exercises',
                     style: TextStyle(

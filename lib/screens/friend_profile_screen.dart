@@ -175,7 +175,7 @@ class _ProgramSessionsViewState extends State<_ProgramSessionsView> {
                               style: TextStyle(
                                 color: isSelected
                                     ? Colors.white
-                                    : const Color(0xFF1A1A2E),
+                                    : Colors.white,
                                 fontSize: 18,
                                 fontWeight: FontWeight.w700,
                               )),
@@ -210,7 +210,7 @@ class _ProgramSessionsViewState extends State<_ProgramSessionsView> {
                     padding: const EdgeInsets.symmetric(
                         horizontal: 10, vertical: 4),
                     decoration: BoxDecoration(
-                      color: Colors.grey[100],
+                      color: const Color(0xFF252525),
                       borderRadius: BorderRadius.circular(20),
                     ),
                     child: Text('${exercises.length} exercises',
@@ -260,7 +260,7 @@ class _ProgramSessionsViewState extends State<_ProgramSessionsView> {
                     child: Row(
                       children: [
                         Icon(Icons.fitness_center,
-                            size: 20, color: Colors.grey[700]),
+                            size: 20, color: const Color(0xFF9E9E9E)),
                         const SizedBox(width: 12),
                         Expanded(
                           child: Column(

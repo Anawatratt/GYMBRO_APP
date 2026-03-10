@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../app_state.dart';
+import 'profile_setup_screen.dart';
 
 class RegisterScreen extends ConsumerStatefulWidget {
   const RegisterScreen({super.key});
@@ -11,8 +12,6 @@ class RegisterScreen extends ConsumerStatefulWidget {
 
 class _RegisterScreenState extends ConsumerState<RegisterScreen> {
   final _usernameCtrl = TextEditingController();
-  final _nameCtrl = TextEditingController();
-  final _imageUrlCtrl = TextEditingController();
   final _passwordCtrl = TextEditingController();
   final _confirmCtrl = TextEditingController();
   bool _obscure = true;
@@ -20,8 +19,6 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
   @override
   void dispose() {
     _usernameCtrl.dispose();
-    _nameCtrl.dispose();
-    _imageUrlCtrl.dispose();
     _passwordCtrl.dispose();
     _confirmCtrl.dispose();
     super.dispose();
@@ -29,12 +26,10 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
 
   Future<void> _register() async {
     final username = _usernameCtrl.text.trim();
-    final name = _nameCtrl.text.trim();
     final password = _passwordCtrl.text;
     final confirm = _confirmCtrl.text;
-    final imageUrl = _imageUrlCtrl.text.trim();
 
-    if (username.isEmpty || name.isEmpty || password.isEmpty) {
+    if (username.isEmpty || password.isEmpty) {
       _showError('Please fill in all required fields');
       return;
     }
@@ -50,13 +45,17 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
     await ref.read(authNotifierProvider.notifier).register(
           username: username,
           password: password,
-          name: name,
-          imageUrl: imageUrl.isEmpty ? null : imageUrl,
         );
 
     final authState = ref.read(authNotifierProvider);
     if (authState.hasError && mounted) {
       _showError(_friendlyError(authState.error!));
+    } else if (mounted) {
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(builder: (_) => const ProfileSetupScreen()),
+        (_) => false,
+      );
     }
   }
 
@@ -83,11 +82,11 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
     final loading = authState.isLoading;
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F6FA),
+      backgroundColor: const Color(0xFF111111),
       appBar: AppBar(
         title: const Text('Create Account'),
         backgroundColor: Colors.transparent,
-        foregroundColor: const Color(0xFF1A1A2E),
+        foregroundColor: Colors.white,
         elevation: 0,
       ),
       body: SafeArea(
@@ -101,7 +100,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                 style: TextStyle(
                   fontSize: 26,
                   fontWeight: FontWeight.w800,
-                  color: const Color(0xFF1A1A2E),
+                  color: Colors.white,
                 ),
               ),
               const SizedBox(height: 6),
@@ -121,25 +120,6 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
               ),
               const SizedBox(height: 14),
 
-              _buildField(
-                controller: _nameCtrl,
-                label: 'Display Name *',
-                hint: 'e.g. John Smith',
-                icon: Icons.person_outline,
-                action: TextInputAction.next,
-              ),
-              const SizedBox(height: 14),
-
-              _buildField(
-                controller: _imageUrlCtrl,
-                label: 'Profile Image URL (optional)',
-                hint: 'https://...',
-                icon: Icons.image_outlined,
-                action: TextInputAction.next,
-                autocorrect: false,
-              ),
-              const SizedBox(height: 14),
-
               TextField(
                 controller: _passwordCtrl,
                 obscureText: _obscure,
@@ -153,7 +133,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                     onPressed: () => setState(() => _obscure = !_obscure),
                   ),
                   filled: true,
-                  fillColor: Colors.white,
+                  fillColor: const Color(0xFF1C1C1E),
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(14),
                     borderSide: BorderSide.none,
@@ -171,7 +151,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                   labelText: 'Confirm Password *',
                   prefixIcon: const Icon(Icons.lock_outline),
                   filled: true,
-                  fillColor: Colors.white,
+                  fillColor: const Color(0xFF1C1C1E),
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(14),
                     borderSide: BorderSide.none,
@@ -246,7 +226,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
         hintText: hint,
         prefixIcon: Icon(icon),
         filled: true,
-        fillColor: Colors.white,
+        fillColor: const Color(0xFF1C1C1E),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),
           borderSide: BorderSide.none,

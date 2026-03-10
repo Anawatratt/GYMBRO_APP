@@ -87,7 +87,7 @@ class AuthNotifier extends StateNotifier<AsyncValue<void>> {
     state = const AsyncValue.loading();
     try {
       await _auth.signInWithEmailAndPassword(
-        email: '${username.trim()}@gymbro.internal',
+        email: '${username.trim().toLowerCase()}@gymbro.app',
         password: password,
       );
       state = const AsyncValue.data(null);
@@ -99,22 +99,24 @@ class AuthNotifier extends StateNotifier<AsyncValue<void>> {
   Future<void> register({
     required String username,
     required String password,
-    required String name,
-    String? imageUrl,
   }) async {
     state = const AsyncValue.loading();
     try {
+      final email = '${username.trim().toLowerCase()}@gymbro.app';
       final cred = await _auth.createUserWithEmailAndPassword(
-        email: '${username.trim()}@gymbro.internal',
+        email: email,
         password: password,
       );
       await _db.collection('users').doc(cred.user!.uid).set({
-        'username': username.trim(),
-        'name': name.trim(),
-        'image_url': imageUrl,
-        'friends': [],
-        'active_program_id': null,
-        'created_at': FieldValue.serverTimestamp(),
+        'displayName': '',
+        'email': email,
+        'photoUrl': '',
+        'bio': '',
+        'fitnessLevel': 'beginner',
+        'gymName': 'CMU Gym',
+        'profileComplete': false,
+        'createdAt': FieldValue.serverTimestamp(),
+        'lastLoginAt': FieldValue.serverTimestamp(),
       });
       state = const AsyncValue.data(null);
     } catch (e, st) {
@@ -211,8 +213,8 @@ Future<void> updateNoteFs(String uid, String noteId,
         .collection('notes')
         .doc(noteId)
         .update({
-      'title': ?title,
-      'body': ?body,
+      if (title != null) 'title': title,
+      if (body != null) 'body': body,
       if (color != null) 'color': color.value,
     });
 

@@ -16,3 +16,9 @@ final notesStreamProvider = StreamProvider<List<Note>>((ref) {
     error: (_, __) => Stream.value([]),
   );
 });
+
+// View another user's notes (read-only)
+final notesByUidProvider = StreamProvider.autoDispose
+    .family<List<Note>, String>((ref, uid) {
+      return ref.watch(noteServiceProvider).notesStream(uid);
+    });

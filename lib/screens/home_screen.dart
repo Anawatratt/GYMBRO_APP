@@ -1,10 +1,54 @@
+import 'dart:io';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../providers/auth_provider.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../providers/notification_provider.dart';
+import '../providers/auth_provider.dart';
+import '../services/user_service.dart';
 import '../app_state.dart';
 import '../widgets/app_drawer.dart';
 import 'notifications_screen.dart';
+
+// ── Today's Workout data ──────────────────────────────────
+
+class _TodayWorkout {
+  final String programName;
+  final String sessionName;
+  const _TodayWorkout({required this.programName, required this.sessionName});
+}
+
+final _todayWorkoutProvider =
+    FutureProvider.autoDispose<_TodayWorkout?>((ref) async {
+  final profile = ref.watch(userProfileProvider).value;
+  final programId = profile?.activeProgramId;
+  if (programId == null) return null;
+
+  final db = FirebaseFirestore.instance;
+  final today = DateTime.now().weekday; // 1=Mon … 7=Sun
+
+  final programDoc =
+      await db.collection('programs').doc(programId).get();
+  if (!programDoc.exists) return null;
+  final programName =
+      programDoc.data()?['program_name'] as String? ?? '';
+
+  final sessionsSnap = await db
+      .collection('programs')
+      .doc(programId)
+      .collection('sessions')
+      .where('day_number', isEqualTo: today)
+      .limit(1)
+      .get();
+
+  final sessionName = sessionsSnap.docs.isEmpty
+      ? 'Rest Day'
+      : (sessionsSnap.docs.first.data()['session_name'] as String? ?? '');
+
+  return _TodayWorkout(
+      programName: programName, sessionName: sessionName);
+});
 
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
@@ -22,7 +66,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
     return Scaffold(
       key: _scaffoldKey,
-      backgroundColor: const Color(0xFFF5F6FA),
+      backgroundColor: const Color(0xFF111111),
       drawer: const AppDrawer(),
       drawerEnableOpenDragGesture: true,
       body: SafeArea(
@@ -71,7 +115,7 @@ class _TopBar extends ConsumerWidget {
               style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.w700,
-                color: Color(0xFF1A1A2E),
+                color: Colors.white,
               ),
             ),
           ),
@@ -119,7 +163,7 @@ class _NavBtn extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: Colors.white,
+      color: const Color(0xFF1C1C1E),
       borderRadius: BorderRadius.circular(12),
       elevation: 1,
       shadowColor: Colors.black26,
@@ -129,7 +173,7 @@ class _NavBtn extends StatelessWidget {
         child: SizedBox(
           width: 44,
           height: 44,
-          child: Icon(icon, size: 22, color: const Color(0xFF1A1A2E)),
+          child: Icon(icon, size: 22, color: Colors.white),
         ),
       ),
     );
@@ -138,36 +182,68 @@ class _NavBtn extends StatelessWidget {
 
 // ── Home Content ─────────────────────────────────────────
 
-class _HomeContent extends StatelessWidget {
+class _HomeContent extends ConsumerStatefulWidget {
   final UserProfile? profile;
   const _HomeContent({this.profile});
+
+  @override
+  ConsumerState<_HomeContent> createState() => _HomeContentState();
+}
+
+class _HomeContentState extends ConsumerState<_HomeContent> {
+  bool _uploadingPhoto = false;
+
+  Future<void> _changePhoto() async {
+    final picker = ImagePicker();
+    final picked = await picker.pickImage(
+      source: ImageSource.gallery,
+      imageQuality: 85,
+      maxWidth: 800,
+    );
+    if (picked == null || !mounted) return;
+
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+
+    setState(() => _uploadingPhoto = true);
+    try {
+      final svc = UserService();
+      final url = await svc.uploadProfileImage(uid, File(picked.path));
+      await svc.updateProfileImageUrl(uid, url);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Upload failed: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _uploadingPhoto = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _ProfileCard(profile: profile),
+        _ProfileCard(
+          profile: widget.profile,
+          onChangePhoto: _changePhoto,
+          uploading: _uploadingPhoto,
+        ),
         const SizedBox(height: 24),
         const Text(
           "Today's Workout",
           style: TextStyle(
-              fontSize: 17,
+              fontSize: 24,
               fontWeight: FontWeight.w700,
-              color: Color(0xFF1A1A2E)),
+              color: Colors.white),
         ),
         const SizedBox(height: 12),
         const _TodaysWorkoutCard(),
-        const SizedBox(height: 24),
-        const Text(
-          'Quick Actions',
-          style: TextStyle(
-              fontSize: 17,
-              fontWeight: FontWeight.w700,
-              color: Color(0xFF1A1A2E)),
-        ),
-        const SizedBox(height: 12),
-        const _QuickActions(),
       ],
     );
   }
@@ -175,22 +251,28 @@ class _HomeContent extends StatelessWidget {
 
 // ── Profile Card ─────────────────────────────────────────
 
-class _ProfileCard extends StatelessWidget {
+class _ProfileCard extends ConsumerWidget {
   final UserProfile? profile;
-  const _ProfileCard({this.profile});
+  final VoidCallback? onChangePhoto;
+  final bool uploading;
+  const _ProfileCard({this.profile, this.onChangePhoto, this.uploading = false});
 
   @override
-  Widget build(BuildContext context) {
-    final name = profile?.name ?? 'User';
-    final initials = profile?.initials ?? '?';
+  Widget build(BuildContext context, WidgetRef ref) {
+    final appUser = ref.watch(currentUserDocProvider).value;
+    // prefer AppUser.displayName, fall back to UserProfile.name
+    final name = (appUser?.displayName.isNotEmpty == true)
+        ? appUser!.displayName
+        : ((profile?.name ?? '').isNotEmpty ? profile!.name : 'User');
+    final initials = name != 'User' ? name[0].toUpperCase() : '?';
 
     return Container(
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(24),
-        color: Colors.white,
+        color: const Color(0xFF1C1C1E),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withAlpha(16),
+            color: Colors.black.withAlpha(60),
             blurRadius: 16,
             offset: const Offset(0, 4),
           ),
@@ -198,174 +280,194 @@ class _ProfileCard extends StatelessWidget {
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(24),
-        child: Column(
-          children: [
-            SizedBox(
-              height: 150,
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  // Left: avatar / image
-                  SizedBox(
-                    width: 120,
-                    child: Stack(
-                      fit: StackFit.expand,
-                      children: [
-                        Container(
-                          decoration: const BoxDecoration(
-                            gradient: LinearGradient(
-                              colors: [Color(0xFFB71C1C), Color(0xFFE53935)],
-                              begin: Alignment.topLeft,
-                              end: Alignment.bottomRight,
-                            ),
-                          ),
+        child: SizedBox(
+          height: 160,
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // Left: avatar / image with edit button
+              SizedBox(
+                width: 130,
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    Container(
+                      decoration: const BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: [Color(0xFFB71C1C), Color(0xFFE53935)],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
                         ),
-                        if (profile?.imageUrl != null)
-                          Image.network(
-                            profile!.imageUrl!,
-                            fit: BoxFit.cover,
-                            errorBuilder: (_, __, ___) => Center(
-                              child: Text(initials,
-                                  style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 40,
-                                      fontWeight: FontWeight.w800)),
-                            ),
-                          )
-                        else
-                          Center(
-                            child: Text(initials,
-                                style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 40,
-                                    fontWeight: FontWeight.w800)),
-                          ),
-                        Container(
-                          decoration: BoxDecoration(
-                            gradient: LinearGradient(
-                              colors: [
-                                Colors.transparent,
-                                Colors.black.withAlpha(60),
-                              ],
-                              begin: Alignment.topCenter,
-                              end: Alignment.bottomCenter,
-                            ),
-                          ),
-                        ),
-                      ],
+                      ),
                     ),
-                  ),
-
-                  // Right: name + stats
-                  Expanded(
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text(
-                            name,
+                    if (profile?.imageUrl != null)
+                      Image.network(
+                        profile!.imageUrl!,
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) => Center(
+                          child: Text(initials,
+                              style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 44,
+                                  fontWeight: FontWeight.w800)),
+                        ),
+                      )
+                    else
+                      Center(
+                        child: Text(initials,
                             style: const TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.w800,
-                              color: Color(0xFF1A1A2E),
-                            ),
-                            overflow: TextOverflow.ellipsis,
+                                color: Colors.white,
+                                fontSize: 44,
+                                fontWeight: FontWeight.w800)),
+                      ),
+                    if (uploading)
+                      const Center(
+                        child: SizedBox(
+                          width: 28,
+                          height: 28,
+                          child: CircularProgressIndicator(
+                            color: Colors.white,
+                            strokeWidth: 2.5,
                           ),
-                          Row(
-                            children: [
-                              _StatChip(
-                                icon: Icons.local_fire_department_rounded,
-                                color: const Color(0xFFE53935),
-                                value: '0',
-                                label: 'Streak',
-                              ),
-                              const SizedBox(width: 8),
-                              _StatChip(
-                                icon: Icons.fitness_center_rounded,
-                                color: const Color(0xFF1A1A2E),
-                                value: '0',
-                                label: 'Today',
-                              ),
-                            ],
+                        ),
+                      )
+                    else
+                      Positioned(
+                        bottom: 8,
+                        right: 8,
+                        child: GestureDetector(
+                          onTap: onChangePhoto,
+                          behavior: HitTestBehavior.opaque,
+                          child: Container(
+                            width: 30,
+                            height: 30,
+                            decoration: BoxDecoration(
+                              color: Colors.black.withAlpha(140),
+                              shape: BoxShape.circle,
+                              border: Border.all(
+                                  color: Colors.white.withAlpha(180),
+                                  width: 1.5),
+                            ),
+                            child: const Icon(
+                              Icons.camera_alt_rounded,
+                              color: Colors.white,
+                              size: 16,
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+
+              // Right: name + stats (no boxes)
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(18, 18, 16, 18),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        name,
+                        style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w800,
+                          color: Colors.white,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      Row(
+                        children: [
+                          _StatRaw(
+                            icon: Icons.local_fire_department_rounded,
+                            value: '0',
+                            label: 'Streak',
+                            iconColor: const Color(0xFFFF6B35),
+                          ),
+                          const SizedBox(width: 20),
+                          _StatRaw(
+                            icon: Icons.fitness_center_rounded,
+                            value: '0',
+                            label: 'Today',
+                            iconColor: Colors.white,
                           ),
                         ],
                       ),
-                    ),
+                    ],
                   ),
-                ],
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
   }
 }
 
-class _StatChip extends StatelessWidget {
+class _StatRaw extends StatelessWidget {
   final IconData icon;
-  final Color color;
   final String value;
   final String label;
+  final Color iconColor;
 
-  const _StatChip({
+  const _StatRaw({
     required this.icon,
-    required this.color,
     required this.value,
     required this.label,
+    required this.iconColor,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
-        color: color.withAlpha(12),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: color.withAlpha(40), width: 1),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 15, color: color),
-          const SizedBox(width: 5),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(value,
-                  style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w800,
-                      color: color)),
-              Text(label,
-                  style:
-                      TextStyle(fontSize: 9, color: color.withAlpha(160))),
-            ],
-          ),
-        ],
-      ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Icon(icon, size: 30, color: iconColor),
+            const SizedBox(width: 5),
+            Text(
+              value,
+              style: const TextStyle(
+                  fontSize: 28,
+                  fontWeight: FontWeight.w800,
+                  color: Colors.white),
+            ),
+          ],
+        ),
+        Text(
+          label,
+          style: const TextStyle(fontSize: 11, color: Color(0xFF9E9E9E)),
+        ),
+      ],
     );
   }
 }
 
 // ── Today's Workout Card ──────────────────────────────────
 
-class _TodaysWorkoutCard extends StatelessWidget {
+class _TodaysWorkoutCard extends ConsumerWidget {
   const _TodaysWorkoutCard();
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final todayAsync = ref.watch(_todayWorkoutProvider);
+
+    final programName = todayAsync.value?.programName ?? '';
+    final sessionName = todayAsync.value?.sessionName ?? '';
+
     return Container(
       width: double.infinity,
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(24),
-        color: Colors.white,
+        color: const Color(0xFF1C1C1E),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withAlpha(16),
+            color: Colors.black.withAlpha(60),
             blurRadius: 16,
             offset: const Offset(0, 4),
           ),
@@ -373,189 +475,87 @@ class _TodaysWorkoutCard extends StatelessWidget {
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(24),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 22, 20, 16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Beginner Fundamentals 4-Week',
-                    style: TextStyle(
-                      color: Colors.grey[500],
-                      fontSize: 12,
-                      fontWeight: FontWeight.w500,
-                    ),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 22, 20, 24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (todayAsync.isLoading)
+                const SizedBox(
+                  height: 16,
+                  width: 16,
+                  child: CircularProgressIndicator(
+                      strokeWidth: 2, color: Color(0xFF6B6B6B)),
+                )
+              else if (programName.isEmpty)
+                const Text(
+                  'No active program',
+                  style: TextStyle(
+                      color: Color(0xFF6B6B6B),
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500),
+                )
+              else
+                Text(
+                  programName,
+                  style: const TextStyle(
+                    color: Color(0xFFAAAAAA),
+                    fontSize: 15,
+                    fontWeight: FontWeight.w500,
                   ),
-                  const SizedBox(height: 6),
-                  const Text(
-                    'Leg Day A',
-                    style: TextStyle(
-                      color: Color(0xFF1A1A2E),
-                      fontSize: 24,
-                      fontWeight: FontWeight.w800,
-                    ),
+                ),
+              const SizedBox(height: 4),
+              if (sessionName.isNotEmpty)
+                Text(
+                  'Goal: $sessionName',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 20,
+                    fontWeight: FontWeight.w800,
                   ),
-                  const SizedBox(height: 12),
-                  Row(
+                ),
+              const SizedBox(height: 24),
+              Center(
+                child: GestureDetector(
+                  onTap: () => Navigator.pushNamed(context, '/plans'),
+                  child: Column(
                     children: [
-                      _Tag(label: 'Strength', color: const Color(0xFFE53935)),
-                      const SizedBox(width: 8),
-                      _Tag(
-                          label: '6 Exercises',
-                          color: const Color(0xFF1A1A2E)),
-                    ],
-                  ),
-                  const SizedBox(height: 20),
-                  SizedBox(
-                    width: double.infinity,
-                    height: 52,
-                    child: ElevatedButton.icon(
-                      onPressed: () =>
-                          Navigator.pushNamed(context, '/plans'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFFE53935),
-                        foregroundColor: Colors.white,
-                        elevation: 0,
-                        shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(14)),
+                      Container(
+                        width: 120,
+                        height: 120,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFE53935),
+                          shape: BoxShape.circle,
+                          boxShadow: [
+                            BoxShadow(
+                              color: const Color(0xFFE53935).withAlpha(100),
+                              blurRadius: 20,
+                              offset: const Offset(0, 6),
+                            ),
+                          ],
+                        ),
+                        child: const Icon(
+                          Icons.play_arrow_rounded,
+                          color: Colors.white,
+                          size: 80,
+                        ),
                       ),
-                      icon: const Icon(Icons.play_arrow_rounded, size: 24),
-                      label: const Text(
+                      const SizedBox(height: 10),
+                      const Text(
                         'Start Workout',
                         style: TextStyle(
-                            fontSize: 15, fontWeight: FontWeight.w700),
+                          color: Colors.white,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                        ),
                       ),
-                    ),
+                    ],
                   ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _Tag extends StatelessWidget {
-  final String label;
-  final Color color;
-  const _Tag({required this.label, required this.color});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
-      decoration: BoxDecoration(
-        color: color.withAlpha(15),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: color.withAlpha(60)),
-      ),
-      child: Text(
-        label,
-        style: TextStyle(
-            color: color, fontSize: 12, fontWeight: FontWeight.w700),
-      ),
-    );
-  }
-}
-
-// ── Quick Actions Grid ────────────────────────────────────
-
-class _QuickActions extends StatelessWidget {
-  const _QuickActions();
-
-  @override
-  Widget build(BuildContext context) {
-    final actions = [
-      _ActionItem(
-        icon: Icons.search_rounded,
-        label: 'Search',
-        color: const Color(0xFFE53935),
-        route: '/search',
-      ),
-      _ActionItem(
-        icon: Icons.calendar_month_rounded,
-        label: 'Plans',
-        color: const Color(0xFF1A1A2E),
-        route: '/plans',
-      ),
-      _ActionItem(
-        icon: Icons.bar_chart_rounded,
-        label: 'Progress',
-        color: const Color(0xFFE53935),
-        route: '/progressAnalytics',
-      ),
-      _ActionItem(
-        icon: Icons.sticky_note_2_rounded,
-        label: 'Notes',
-        color: const Color(0xFF1A1A2E),
-        route: '/notes',
-      ),
-    ];
-
-    return GridView.count(
-      crossAxisCount: 4,
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      crossAxisSpacing: 12,
-      childAspectRatio: 0.85,
-      children: actions.map((a) => _ActionTile(item: a)).toList(),
-    );
-  }
-}
-
-class _ActionItem {
-  final IconData icon;
-  final String label;
-  final Color color;
-  final String route;
-  const _ActionItem(
-      {required this.icon,
-      required this.label,
-      required this.color,
-      required this.route});
-}
-
-class _ActionTile extends StatelessWidget {
-  final _ActionItem item;
-  const _ActionTile({required this.item});
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: () => Navigator.pushNamed(context, item.route),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 56,
-            height: 56,
-            decoration: BoxDecoration(
-              color: item.color,
-              borderRadius: BorderRadius.circular(16),
-              boxShadow: [
-                BoxShadow(
-                  color: item.color.withAlpha(80),
-                  blurRadius: 10,
-                  offset: const Offset(0, 4),
                 ),
-              ],
-            ),
-            child: Icon(item.icon, color: Colors.white, size: 26),
+              ),
+            ],
           ),
-          const SizedBox(height: 8),
-          Text(
-            item.label,
-            style: const TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: Color(0xFF1A1A2E)),
-          ),
-        ],
+        ),
       ),
     );
   }

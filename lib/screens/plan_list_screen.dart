@@ -87,11 +87,11 @@ class PlanListScreen extends ConsumerWidget {
                       child: Container(
                         padding: const EdgeInsets.all(16),
                         decoration: BoxDecoration(
-                          color: Colors.white,
+                          color: const Color(0xFF1C1C1E),
                           borderRadius: BorderRadius.circular(18),
                           boxShadow: [
                             BoxShadow(
-                              color: Colors.black.withAlpha(12),
+                              color: Colors.black.withAlpha(40),
                               blurRadius: 10,
                               offset: const Offset(0, 3),
                             ),
@@ -100,7 +100,7 @@ class PlanListScreen extends ConsumerWidget {
                         child: Row(
                           children: [
                             Icon(_goalIcon(goal),
-                                size: 28, color: Colors.grey[700]),
+                                size: 28, color: Colors.grey[400]),
                             const SizedBox(width: 14),
                             Expanded(
                               child: Column(
@@ -138,7 +138,7 @@ class PlanListScreen extends ConsumerWidget {
                             ),
                             const SizedBox(width: 8),
                             Icon(Icons.chevron_right,
-                                color: Colors.grey[350], size: 22),
+                                color: Colors.grey[600], size: 22),
                           ],
                         ),
                       ),
@@ -157,7 +157,7 @@ class PlanListScreen extends ConsumerWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
-        color: Colors.grey[100],
+        color: const Color(0xFF252525),
         borderRadius: BorderRadius.circular(20),
       ),
       child: Text(

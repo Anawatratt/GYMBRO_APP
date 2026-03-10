@@ -6,6 +6,12 @@ import '../providers/auth_provider.dart';
 import '../providers/friend_provider.dart';
 import 'friend_profile_screen.dart';
 
+String _usernameTag(String email) {
+  final idx = email.indexOf('@');
+  if (idx <= 0) return email;
+  return '@${email.substring(0, idx)}';
+}
+
 class FriendsScreen extends ConsumerStatefulWidget {
   const FriendsScreen({super.key});
 
@@ -15,38 +21,32 @@ class FriendsScreen extends ConsumerStatefulWidget {
 
 class _FriendsScreenState extends ConsumerState<FriendsScreen> {
   final _searchCtrl = TextEditingController();
-  AppUser? _searchResult;
-  String? _searchError;
-  bool _searching = false;
-  String? _actionLoading; // uid being acted upon
+  String? _actionLoading;
+  List<AppUser> _suggestions = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _searchCtrl.addListener(_onSearchChanged);
+  }
 
   @override
   void dispose() {
+    _searchCtrl.removeListener(_onSearchChanged);
     _searchCtrl.dispose();
     super.dispose();
   }
 
-  Future<void> _search() async {
-    final email = _searchCtrl.text.trim();
-    if (email.isEmpty) return;
+  Future<void> _onSearchChanged() async {
+    final text = _searchCtrl.text.trim();
+    if (text.isEmpty) {
+      if (mounted) setState(() => _suggestions = []);
+      return;
+    }
     final me = ref.read(currentUserDocProvider).value;
     if (me == null) return;
-
-    setState(() {
-      _searching = true;
-      _searchResult = null;
-      _searchError = null;
-    });
-
-    try {
-      final result = await ref.read(friendServiceProvider).searchByEmail(email, me.uid);
-      setState(() {
-        _searchResult = result;
-        _searchError = result == null ? 'No user found with that email.' : null;
-      });
-    } finally {
-      setState(() => _searching = false);
-    }
+    final results = await ref.read(friendServiceProvider).suggestByPrefix(text, me.uid);
+    if (mounted) setState(() => _suggestions = results);
   }
 
   Future<void> _sendRequest(AppUser target) async {
@@ -54,16 +54,25 @@ class _FriendsScreenState extends ConsumerState<FriendsScreen> {
     if (me == null) return;
     setState(() => _actionLoading = target.uid);
     try {
-      await ref.read(friendServiceProvider).sendRequest(me, target.uid, target.displayName);
+      await ref.read(friendServiceProvider).sendRequest(me, target);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Friend request sent to ${target.displayName}! 🎉'), backgroundColor: const Color(0xFF3F51B5)),
-        );
-        setState(() => _searchResult = null);
         _searchCtrl.clear();
+        setState(() => _suggestions = []);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Friend request sent to ${target.displayName.isNotEmpty ? target.displayName : _usernameTag(target.email)}! 🎉',
+            ),
+            backgroundColor: const Color(0xFFE53935),
+          ),
+        );
       }
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+        );
+      }
     } finally {
       if (mounted) setState(() => _actionLoading = null);
     }
@@ -74,7 +83,8 @@ class _FriendsScreenState extends ConsumerState<FriendsScreen> {
     if (me == null) return;
     setState(() => _actionLoading = friend.friendUid);
     try {
-      await ref.read(friendServiceProvider).acceptRequest(me.uid, me.displayName, friend.friendUid, friend.displayName);
+      final myName = me.displayName.isNotEmpty ? me.displayName : me.email.split('@').first;
+      await ref.read(friendServiceProvider).acceptRequest(me.uid, myName, friend.friendUid, friend.displayName);
     } finally {
       if (mounted) setState(() => _actionLoading = null);
     }
@@ -115,7 +125,13 @@ class _FriendsScreenState extends ConsumerState<FriendsScreen> {
   Future<void> _viewProfile(Friend friend) async {
     final user = await ref.read(userServiceProvider).getUserOnce(friend.friendUid);
     if (user != null && mounted) {
-      Navigator.push(context, MaterialPageRoute(builder: (_) => FriendProfileScreen(friend: user)));
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          settings: RouteSettings(arguments: {'uid': user.uid, 'name': user.displayName}),
+          builder: (_) => const FriendProfileScreen(),
+        ),
+      );
     }
   }
 
@@ -134,56 +150,92 @@ class _FriendsScreenState extends ConsumerState<FriendsScreen> {
           // Search section
           _SectionHeader(icon: Icons.search_rounded, title: 'Find Friends', color: const Color(0xFF3F51B5)),
           const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(14),
-                    boxShadow: [BoxShadow(color: Colors.black.withAlpha(8), blurRadius: 8)],
-                  ),
-                  child: TextField(
-                    controller: _searchCtrl,
-                    keyboardType: TextInputType.emailAddress,
-                    onSubmitted: (_) => _search(),
-                    decoration: InputDecoration(
-                      hintText: 'Search by email...',
-                      hintStyle: TextStyle(color: Colors.grey[400]),
-                      prefixIcon: Icon(Icons.email_outlined, color: Colors.grey[400]),
-                      border: InputBorder.none,
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                    ),
-                  ),
-                ),
+          Container(
+            decoration: BoxDecoration(
+              color: const Color(0xFF1C1C1E),
+              borderRadius: BorderRadius.circular(14),
+              boxShadow: [BoxShadow(color: Colors.black.withAlpha(40), blurRadius: 8)],
+            ),
+            child: TextField(
+              controller: _searchCtrl,
+              keyboardType: TextInputType.text,
+              autocorrect: false,
+              decoration: InputDecoration(
+                hintText: 'Search by username...',
+                hintStyle: TextStyle(color: Colors.grey[500]),
+                prefixIcon: Icon(Icons.alternate_email, color: Colors.grey[500]),
+                border: InputBorder.none,
+                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
               ),
-              const SizedBox(width: 10),
-              SizedBox(
-                height: 50,
-                child: ElevatedButton(
-                  onPressed: _searching ? null : _search,
-                  style: ElevatedButton.styleFrom(
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                  ),
-                  child: _searching
-                      ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                      : const Text('Search'),
-                ),
-              ),
-            ],
+            ),
           ),
 
-          // Search result
-          if (_searchError != null) ...[
-            const SizedBox(height: 12),
-            Center(child: Text(_searchError!, style: TextStyle(color: Colors.grey[500]))),
-          ],
-          if (_searchResult != null) ...[
-            const SizedBox(height: 12),
-            _SearchResultCard(
-              user: _searchResult!,
-              loading: _actionLoading == _searchResult!.uid,
-              onAdd: () => _sendRequest(_searchResult!),
+          // Suggestions with Add button
+          if (_suggestions.isNotEmpty) ...[
+            const SizedBox(height: 6),
+            Container(
+              decoration: BoxDecoration(
+                color: const Color(0xFF1C1C1E),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: const Color(0xFF2C2C2E)),
+              ),
+              child: Column(
+                children: _suggestions.asMap().entries.map((entry) {
+                  final i = entry.key;
+                  final user = entry.value;
+                  final username = user.email.split('@').first;
+                  final name = user.displayName.isNotEmpty ? user.displayName : username;
+                  final isLoading = _actionLoading == user.uid;
+                  return Column(
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        child: Row(
+                          children: [
+                            CircleAvatar(
+                              radius: 18,
+                              backgroundColor: const Color(0xFF3F51B5).withAlpha(40),
+                              child: Text(
+                                name[0].toUpperCase(),
+                                style: const TextStyle(fontSize: 14, color: Color(0xFF3F51B5), fontWeight: FontWeight.w700),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(name, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+                                  Text('@$username', style: TextStyle(color: Colors.grey[500], fontSize: 12)),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            SizedBox(
+                              height: 34,
+                              child: ElevatedButton.icon(
+                                onPressed: isLoading ? null : () => _sendRequest(user),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: const Color(0xFF3F51B5),
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                ),
+                                icon: isLoading
+                                    ? const SizedBox(width: 12, height: 12, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                                    : const Icon(Icons.person_add, size: 15),
+                                label: const Text('Add', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      if (i < _suggestions.length - 1)
+                        Divider(height: 1, color: const Color(0xFF2C2C2E), indent: 16, endIndent: 16),
+                    ],
+                  );
+                }).toList(),
+              ),
             ),
           ],
 
@@ -231,7 +283,8 @@ class _FriendsScreenState extends ConsumerState<FriendsScreen> {
             Center(
               child: Padding(
                 padding: const EdgeInsets.symmetric(vertical: 20),
-                child: Text('No friends yet. Search by email to add!', style: TextStyle(color: Colors.grey[400], fontSize: 14)),
+                child: Text('No friends yet. Search by username to add!',
+                    style: TextStyle(color: Colors.grey[400], fontSize: 14)),
               ),
             )
           else
@@ -266,56 +319,8 @@ class _SectionHeader extends StatelessWidget {
           child: Icon(icon, size: 16, color: color),
         ),
         const SizedBox(width: 10),
-        Text(title, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: Color(0xFF1A1A2E))),
+        Text(title, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: Colors.white)),
       ],
-    );
-  }
-}
-
-class _SearchResultCard extends StatelessWidget {
-  final AppUser user;
-  final bool loading;
-  final VoidCallback onAdd;
-  const _SearchResultCard({required this.user, required this.loading, required this.onAdd});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFF3F51B5).withAlpha(60)),
-      ),
-      child: Row(
-        children: [
-          CircleAvatar(
-            backgroundColor: const Color(0xFF3F51B5),
-            child: Text(user.displayName.isNotEmpty ? user.displayName[0].toUpperCase() : '?',
-                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(user.displayName, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
-                Text(user.email, style: TextStyle(color: Colors.grey[500], fontSize: 13)),
-              ],
-            ),
-          ),
-          ElevatedButton.icon(
-            onPressed: loading ? null : onAdd,
-            icon: loading
-                ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                : const Icon(Icons.person_add, size: 18),
-            label: const Text('Add'),
-            style: ElevatedButton.styleFrom(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-            ),
-          ),
-        ],
-      ),
     );
   }
 }
@@ -329,9 +334,10 @@ class _FriendTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final subtitle = friend.email.isNotEmpty ? _usernameTag(friend.email) : '';
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
-      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14)),
+      decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(14)),
       child: ListTile(
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
         leading: CircleAvatar(
@@ -344,7 +350,7 @@ class _FriendTile extends StatelessWidget {
         title: Text(friend.displayName, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15)),
         subtitle: loading
             ? const LinearProgressIndicator()
-            : Text(friend.email, style: TextStyle(color: Colors.grey[500], fontSize: 13)),
+            : (subtitle.isNotEmpty ? Text(subtitle, style: TextStyle(color: Colors.grey[500], fontSize: 13)) : null),
         onTap: onTap,
         trailing: trailing,
       ),

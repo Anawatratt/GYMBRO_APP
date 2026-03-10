@@ -30,7 +30,7 @@ Future<void> seedWorkoutHistory(FirebaseFirestore db) async {
   final auth = FirebaseAuth.instance;
   try {
     await auth.signInWithEmailAndPassword(
-      email: 'john123@gymbro.internal',
+      email: 'john123@gymbro.app',
       password: 'gymbro123',
     );
   } catch (e) {
@@ -282,7 +282,7 @@ Future<void> seedWorkoutHistory(FirebaseFirestore db) async {
 
 // ═══════════════════════════════════════════════════════════
 // 0. USERS — สร้าง Firebase Auth + Firestore document
-//    email จะถูกสร้างในรูปแบบ {username}@gymbro.internal
+//    email จะถูกสร้างในรูปแบบ {username}@gymbro.app
 // ═══════════════════════════════════════════════════════════
 
 const _seedUsers = <Map<String, String>>[
@@ -313,24 +313,51 @@ Future<void> seedUsers(FirebaseFirestore db) async {
   final auth = FirebaseAuth.instance;
 
   for (final u in _seedUsers) {
-    final email = '${u['username']}@gymbro.internal';
+    final email = '${u['username']}@gymbro.app';
+    String uid;
+
+    // Try create; if already exists sign in to get the UID
     try {
       final cred = await auth.createUserWithEmailAndPassword(
         email: email,
         password: u['password']!,
       );
-      await db.collection('users').doc(cred.user!.uid).set({
-        'username': u['username'],
-        'name': u['name'],
-        'image_url': u['image_url'],
-        'friends': <String>[],
-        'active_program_id': null,
-        'created_at': FieldValue.serverTimestamp(),
-      });
-      debugPrint('Seeded user: ${u['username']}');
-    } catch (e) {
-      debugPrint('Skip ${u['username']}: $e');
+      uid = cred.user!.uid;
+      debugPrint('Created auth: ${u['username']}');
+    } catch (_) {
+      try {
+        final cred = await auth.signInWithEmailAndPassword(
+          email: email,
+          password: u['password']!,
+        );
+        uid = cred.user!.uid;
+        debugPrint('Signed in existing: ${u['username']}');
+      } catch (e) {
+        debugPrint('Cannot get uid for ${u['username']}: $e');
+        continue;
+      }
     }
+
+    // Always (re)write the Firestore doc so fields are correct
+    await db.collection('users').doc(uid).set({
+      'displayName': u['name'],
+      'email': email,
+      'photoUrl': u['image_url'],
+      'bio': '',
+      'fitnessLevel': 'beginner',
+      'gymName': 'CMU Gym',
+      'profileComplete': true,
+      'createdAt': FieldValue.serverTimestamp(),
+      'lastLoginAt': FieldValue.serverTimestamp(),
+      'username': u['username'],
+      'name': u['name'],
+      'image_url': u['image_url'],
+      'friends': <String>[],
+      'active_program_id': null,
+      'created_at': FieldValue.serverTimestamp(),
+    });
+    debugPrint('✅ Seeded user doc: ${u['username']} (uid=$uid)');
+    await auth.signOut();
   }
 
   // ลง sign out หลัง seed เสร็จ (ไม่ให้ค้าง session ของ seed user)

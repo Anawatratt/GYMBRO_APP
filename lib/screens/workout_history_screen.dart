@@ -133,7 +133,7 @@ class _HistoryCardState extends State<_HistoryCard> {
                       padding: const EdgeInsets.symmetric(
                           horizontal: 10, vertical: 4),
                       decoration: BoxDecoration(
-                        color: Colors.grey[100],
+                        color: const Color(0xFF252525),
                         borderRadius: BorderRadius.circular(20),
                       ),
                       child: Text(

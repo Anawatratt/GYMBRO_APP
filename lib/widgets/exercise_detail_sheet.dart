@@ -116,7 +116,7 @@ class _ExerciseDetailSheet extends StatelessWidget {
                               style: const TextStyle(
                                 fontSize: 20,
                                 fontWeight: FontWeight.w800,
-                                color: Color(0xFF1A1A2E),
+                                color: Colors.white,
                               ),
                             ),
                             const SizedBox(height: 6),
@@ -202,7 +202,7 @@ class _ExerciseDetailSheet extends StatelessWidget {
                                           ? FontWeight.w600
                                           : FontWeight.w400,
                                       color: isPrimary
-                                          ? const Color(0xFF1A1A2E)
+                                          ? Colors.white
                                           : Colors.grey[600],
                                       fontSize: 14,
                                     ),
@@ -222,7 +222,7 @@ class _ExerciseDetailSheet extends StatelessWidget {
                                   width: 80,
                                   child: LinearProgressIndicator(
                                     value: pct / 100,
-                                    backgroundColor: Colors.grey[200],
+                                    backgroundColor: const Color(0xFF2C2C2E),
                                     color: isPrimary
                                         ? const Color(0xFFE53935)
                                         : Colors.grey[400],
@@ -270,7 +270,7 @@ class _ExerciseDetailSheet extends StatelessWidget {
                                     style: TextStyle(
                                       fontSize: 14,
                                       color: isRequired
-                                          ? const Color(0xFF1A1A2E)
+                                          ? Colors.white
                                           : Colors.grey[500],
                                     ),
                                   ),
@@ -333,7 +333,7 @@ class _SectionTitle extends StatelessWidget {
       style: const TextStyle(
         fontSize: 13,
         fontWeight: FontWeight.w700,
-        color: Color(0xFF1A1A2E),
+        color: Colors.white,
         letterSpacing: 0.5,
       ),
     );
