@@ -16,6 +16,7 @@ class _PlanDetailScreenState extends State<PlanDetailScreen> {
   final Set<String> _completedSessions = {};
   final Set<String> _checkedExercises = {}; // "$sessionKey-$index"
   bool _saving = false;
+  bool _todayAlreadyLogged = false;
   final ScrollController _dayScrollController = ScrollController();
 
   Stream<QuerySnapshot>? _sessionsStream;
@@ -26,6 +27,23 @@ class _PlanDetailScreenState extends State<PlanDetailScreen> {
     super.initState();
     _selectedDay = DateTime.now().weekday.clamp(1, 7);
     WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToDay(_selectedDay));
+    _checkTodayLogged();
+  }
+
+  Future<void> _checkTodayLogged() async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+    final snap = await FirebaseFirestore.instance.collection('users').doc(uid).get();
+    final ts = snap.data()?['lastWorkoutDate'] as Timestamp?;
+    if (ts == null) return;
+    final last = ts.toDate();
+    final now = DateTime.now();
+    final sameDay = last.year == now.year &&
+        last.month == now.month &&
+        last.day == now.day;
+    if (sameDay && mounted) {
+      setState(() => _todayAlreadyLogged = true);
+    }
   }
 
   @override
@@ -98,11 +116,13 @@ class _PlanDetailScreenState extends State<PlanDetailScreen> {
     if (_completedSessions.contains(sessionKey)) return;
     setState(() => _saving = true);
 
+    final uid = FirebaseAuth.instance.currentUser?.uid ?? '';
+
     await FirebaseFirestore.instance.collection('workout_history').add({
       'program_name': programName,
       'session_name': sessionName,
       'completed_at': FieldValue.serverTimestamp(),
-      'user_id': FirebaseAuth.instance.currentUser?.uid ?? '',
+      'user_id': uid,
       'exercises': exercises
           .map(
             (e) => {
@@ -115,20 +135,47 @@ class _PlanDetailScreenState extends State<PlanDetailScreen> {
           .toList(),
     });
 
-    // Update active program so home screen reflects latest
-    final uid2 = FirebaseAuth.instance.currentUser?.uid ?? '';
-    if (uid2.isNotEmpty && _programId != null) {
-      await FirebaseFirestore.instance
-          .collection('users')
-          .doc(uid2)
-          .update({'active_program_id': _programId});
+    // Update streak based on last workout date (not log count)
+    if (uid.isNotEmpty) {
+      final userRef = FirebaseFirestore.instance.collection('users').doc(uid);
+      final userSnap = await userRef.get();
+      final data = userSnap.data() ?? {};
+
+      final todayDate = DateTime.now();
+      final todayOnly = DateTime(todayDate.year, todayDate.month, todayDate.day);
+
+      final lastWorkoutTs = data['lastWorkoutDate'] as Timestamp?;
+      final lastWorkoutDate = lastWorkoutTs?.toDate();
+      final lastWorkoutOnly = lastWorkoutDate != null
+          ? DateTime(lastWorkoutDate.year, lastWorkoutDate.month, lastWorkoutDate.day)
+          : null;
+
+      // Only update streak if we haven't already logged today
+      if (lastWorkoutOnly == null || lastWorkoutOnly.isBefore(todayOnly)) {
+        final currentStreak = data['dayStreak'] as int? ?? 0;
+        final yesterday = todayOnly.subtract(const Duration(days: 1));
+
+        // Streak continues if last workout was yesterday, resets otherwise
+        final newStreak = (lastWorkoutOnly != null && lastWorkoutOnly == yesterday)
+            ? currentStreak + 1
+            : 1;
+
+        await userRef.update({
+          'dayStreak': newStreak,
+          'lastWorkoutDate': FieldValue.serverTimestamp(),
+          if (_programId != null) 'active_program_id': _programId,
+        });
+      } else if (_programId != null) {
+        // Already logged today — just update active program
+        await userRef.update({'active_program_id': _programId});
+      }
     }
 
     setState(() {
       _completedSessions.add(sessionKey);
+      _todayAlreadyLogged = true;
       _saving = false;
     });
-
   }
 
   @override
@@ -615,6 +662,9 @@ class _PlanDetailScreenState extends State<PlanDetailScreen> {
                   child: _SlideToLog(
                     isDone: isDone,
                     isSaving: _saving,
+                    isFutureDay: _selectedDay > DateTime.now().weekday,
+                    isPastDay: _selectedDay < DateTime.now().weekday,
+                    todayAlreadyLogged: _isToday(_selectedDay) && _todayAlreadyLogged && !isDone,
                     onCompleted: () => _markComplete(
                       programName: programName,
                       sessionName: currentSession['session_name'] ?? '',
@@ -723,11 +773,17 @@ class _RestDayContent extends StatelessWidget {
 class _SlideToLog extends StatefulWidget {
   final bool isDone;
   final bool isSaving;
+  final bool isFutureDay;
+  final bool isPastDay;
+  final bool todayAlreadyLogged;
   final VoidCallback onCompleted;
 
   const _SlideToLog({
     required this.isDone,
     required this.isSaving,
+    required this.isFutureDay,
+    required this.isPastDay,
+    required this.todayAlreadyLogged,
     required this.onCompleted,
   });
 
@@ -777,6 +833,64 @@ class _SlideToLogState extends State<_SlideToLog>
 
   @override
   Widget build(BuildContext context) {
+    // ── Locked states ──────────────────────────────────────
+    if (widget.isFutureDay || widget.isPastDay) {
+      final label = widget.isFutureDay ? 'Available on this day' : 'Past day — cannot log';
+      return Container(
+        height: 56,
+        decoration: BoxDecoration(
+          color: const Color(0xFF252525),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: const Color(0xFF3A3A3A)),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              widget.isFutureDay ? Icons.lock_clock_outlined : Icons.history,
+              color: const Color(0xFF6B6B6B),
+              size: 18,
+            ),
+            const SizedBox(width: 8),
+            Text(
+              label,
+              style: const TextStyle(
+                color: Color(0xFF6B6B6B),
+                fontWeight: FontWeight.w600,
+                fontSize: 14,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (widget.todayAlreadyLogged) {
+      return Container(
+        height: 56,
+        decoration: BoxDecoration(
+          color: const Color(0xFF252525),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: const Color(0xFF3A3A3A)),
+        ),
+        child: const Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.check_circle_outline_rounded, color: Color(0xFF6B6B6B), size: 18),
+            SizedBox(width: 8),
+            Text(
+              'Already logged today',
+              style: TextStyle(
+                color: Color(0xFF6B6B6B),
+                fontWeight: FontWeight.w600,
+                fontSize: 14,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
     if (widget.isDone) {
       return Container(
         height: 56,

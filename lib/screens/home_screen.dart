@@ -13,10 +13,30 @@ import 'notifications_screen.dart';
 
 // ── Today's Workout data ──────────────────────────────────
 
+class _TodayExercise {
+  final String exerciseId;
+  final int sets;
+  final int reps;
+  final double? weight;
+  const _TodayExercise({
+    required this.exerciseId,
+    required this.sets,
+    required this.reps,
+    this.weight,
+  });
+}
+
 class _TodayWorkout {
   final String programName;
   final String sessionName;
-  const _TodayWorkout({required this.programName, required this.sessionName});
+  final String programId;
+  final List<_TodayExercise> exercises;
+  const _TodayWorkout({
+    required this.programName,
+    required this.sessionName,
+    required this.programId,
+    this.exercises = const [],
+  });
 }
 
 final _todayWorkoutProvider =
@@ -28,11 +48,9 @@ final _todayWorkoutProvider =
   final db = FirebaseFirestore.instance;
   final today = DateTime.now().weekday; // 1=Mon … 7=Sun
 
-  final programDoc =
-      await db.collection('programs').doc(programId).get();
+  final programDoc = await db.collection('programs').doc(programId).get();
   if (!programDoc.exists) return null;
-  final programName =
-      programDoc.data()?['program_name'] as String? ?? '';
+  final programName = programDoc.data()?['program_name'] as String? ?? '';
 
   final sessionsSnap = await db
       .collection('programs')
@@ -42,12 +60,33 @@ final _todayWorkoutProvider =
       .limit(1)
       .get();
 
-  final sessionName = sessionsSnap.docs.isEmpty
-      ? 'Rest Day'
-      : (sessionsSnap.docs.first.data()['session_name'] as String? ?? '');
+  if (sessionsSnap.docs.isEmpty) {
+    return _TodayWorkout(
+        programName: programName, sessionName: 'Rest Day', programId: programId);
+  }
+
+  final sessionData = sessionsSnap.docs.first.data();
+  final sessionName = sessionData['session_name'] as String? ?? '';
+  final rawExercises = (sessionData['exercises'] as List<dynamic>? ?? []);
+  rawExercises.sort((a, b) =>
+      (a['order'] as int? ?? 0).compareTo(b['order'] as int? ?? 0));
+
+  final exercises = rawExercises.map((e) {
+    final map = e as Map<String, dynamic>;
+    return _TodayExercise(
+      exerciseId: map['exercise_id'] as String? ?? '',
+      sets: (map['sets'] as num?)?.toInt() ?? 0,
+      reps: (map['reps'] as num?)?.toInt() ?? 0,
+      weight: (map['weight'] as num?)?.toDouble(),
+    );
+  }).toList();
 
   return _TodayWorkout(
-      programName: programName, sessionName: sessionName);
+    programName: programName,
+    sessionName: sessionName,
+    programId: programId,
+    exercises: exercises,
+  );
 });
 
 class HomeScreen extends ConsumerStatefulWidget {
@@ -226,6 +265,7 @@ class _HomeContentState extends ConsumerState<_HomeContent> {
 
   @override
   Widget build(BuildContext context) {
+    final todayCount = ref.watch(_todayWorkoutProvider).value?.exercises.length ?? 0;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -233,6 +273,7 @@ class _HomeContentState extends ConsumerState<_HomeContent> {
           profile: widget.profile,
           onChangePhoto: _changePhoto,
           uploading: _uploadingPhoto,
+          todayCount: todayCount,
         ),
         const SizedBox(height: 24),
         const Text(
@@ -255,11 +296,13 @@ class _ProfileCard extends ConsumerWidget {
   final UserProfile? profile;
   final VoidCallback? onChangePhoto;
   final bool uploading;
-  const _ProfileCard({this.profile, this.onChangePhoto, this.uploading = false});
+  final int todayCount;
+  const _ProfileCard({this.profile, this.onChangePhoto, this.uploading = false, this.todayCount = 0});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final appUser = ref.watch(currentUserDocProvider).value;
+    final streak = appUser?.dayStreak ?? 0;
     // prefer AppUser.displayName, fall back to UserProfile.name
     final name = (appUser?.displayName.isNotEmpty == true)
         ? appUser!.displayName
@@ -381,14 +424,14 @@ class _ProfileCard extends ConsumerWidget {
                         children: [
                           _StatRaw(
                             icon: Icons.local_fire_department_rounded,
-                            value: '0',
+                            value: '$streak',
                             label: 'Streak',
                             iconColor: const Color(0xFFFF6B35),
                           ),
                           const SizedBox(width: 20),
                           _StatRaw(
                             icon: Icons.fitness_center_rounded,
-                            value: '0',
+                            value: '$todayCount',
                             label: 'Today',
                             iconColor: Colors.white,
                           ),
@@ -456,9 +499,9 @@ class _TodaysWorkoutCard extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final todayAsync = ref.watch(_todayWorkoutProvider);
-
     final programName = todayAsync.value?.programName ?? '';
     final sessionName = todayAsync.value?.sessionName ?? '';
+    final programId = todayAsync.value?.programId ?? '';
 
     return Container(
       width: double.infinity,
@@ -517,7 +560,13 @@ class _TodaysWorkoutCard extends ConsumerWidget {
               const SizedBox(height: 24),
               Center(
                 child: GestureDetector(
-                  onTap: () => Navigator.pushNamed(context, '/plans'),
+                  onTap: () => programId.isNotEmpty
+                      ? Navigator.pushNamed(context, '/planDetail',
+                          arguments: {
+                            'programId': programId,
+                            'programName': programName,
+                          })
+                      : Navigator.pushNamed(context, '/plans'),
                   child: Column(
                     children: [
                       Container(

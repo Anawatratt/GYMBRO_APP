@@ -290,22 +290,22 @@ const _seedUsers = <Map<String, String>>[
     'username': 'john123',
     'name': 'John Smith',
     'password': 'gymbro123',
-    'image_url':
-        'https://i.pravatar.cc/150?img=11',
+    'image_url': 'https://i.pravatar.cc/150?img=11',
+    'active_program_id': 'push_pull_legs',
   },
   {
     'username': 'jane456',
     'name': 'Jane Doe',
     'password': 'gymbro123',
-    'image_url':
-        'https://i.pravatar.cc/150?img=47',
+    'image_url': 'https://i.pravatar.cc/150?img=47',
+    'active_program_id': 'strength_building',
   },
   {
     'username': 'mike789',
     'name': 'Mike Johnson',
     'password': 'gymbro123',
-    'image_url':
-        'https://i.pravatar.cc/150?img=68',
+    'image_url': 'https://i.pravatar.cc/150?img=68',
+    'active_program_id': 'beginner_full_body',
   },
 ];
 
@@ -353,7 +353,7 @@ Future<void> seedUsers(FirebaseFirestore db) async {
       'name': u['name'],
       'image_url': u['image_url'],
       'friends': <String>[],
-      'active_program_id': null,
+      'active_program_id': u['active_program_id'],
       'created_at': FieldValue.serverTimestamp(),
     });
     debugPrint('✅ Seeded user doc: ${u['username']} (uid=$uid)');
