@@ -101,6 +101,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Keep the notification watcher alive so banners pop up anytime Home is mounted
+    ref.watch(notificationWatcherProvider);
+
     final profileAsync = ref.watch(userProfileProvider);
 
     return Scaffold(
