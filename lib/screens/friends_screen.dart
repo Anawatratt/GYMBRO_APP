@@ -5,6 +5,7 @@ import '../models/app_user.dart';
 import '../providers/auth_provider.dart';
 import '../providers/friend_provider.dart';
 import 'friend_profile_screen.dart';
+import 'qr_screen.dart';
 
 String _usernameTag(String email) {
   final idx = email.indexOf('@');
@@ -143,7 +144,19 @@ class _FriendsScreenState extends ConsumerState<FriendsScreen> {
     final accepted = friends.where((f) => f.status == 'accepted').toList();
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Friends')),
+      appBar: AppBar(
+        title: const Text('Friends'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.qr_code_scanner_rounded),
+            tooltip: 'QR Code',
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const QRScreen()),
+            ),
+          ),
+        ],
+      ),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [

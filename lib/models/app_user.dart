@@ -13,6 +13,7 @@ class AppUser {
   final DateTime lastLoginAt;
   final int dayStreak;
   final DateTime? lastWorkoutDate;
+  final String? activeProgramId;
 
   const AppUser({
     required this.uid,
@@ -27,6 +28,7 @@ class AppUser {
     required this.lastLoginAt,
     this.dayStreak = 0,
     this.lastWorkoutDate,
+    this.activeProgramId,
   });
 
   factory AppUser.fromMap(String uid, Map<String, dynamic> map) {
@@ -43,6 +45,7 @@ class AppUser {
       lastLoginAt: (map['lastLoginAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
       dayStreak: map['dayStreak'] as int? ?? 0,
       lastWorkoutDate: (map['lastWorkoutDate'] as Timestamp?)?.toDate(),
+      activeProgramId: map['active_program_id'] as String?,
     );
   }
 
@@ -71,6 +74,7 @@ class AppUser {
     DateTime? lastLoginAt,
     int? dayStreak,
     DateTime? lastWorkoutDate,
+    String? activeProgramId,
   }) {
     return AppUser(
       uid: uid,
@@ -85,6 +89,7 @@ class AppUser {
       lastLoginAt: lastLoginAt ?? this.lastLoginAt,
       dayStreak: dayStreak ?? this.dayStreak,
       lastWorkoutDate: lastWorkoutDate ?? this.lastWorkoutDate,
+      activeProgramId: activeProgramId ?? this.activeProgramId,
     );
   }
 }

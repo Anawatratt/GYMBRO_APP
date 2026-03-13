@@ -128,43 +128,12 @@ class AuthNotifier extends StateNotifier<AsyncValue<void>> {
     await _auth.signOut();
   }
 
-  // Returns null on success, error message on failure
-  Future<String?> addFriend(String friendUsername) async {
-    final currentUser = _auth.currentUser;
-    if (currentUser == null) return 'Not logged in';
-
-    final q = await _db
-        .collection('users')
-        .where('username', isEqualTo: friendUsername.trim())
-        .limit(1)
-        .get();
-
-    if (q.docs.isEmpty) return 'User not found';
-    final friendUid = q.docs.first.id;
-    if (friendUid == currentUser.uid) return 'Cannot add yourself';
-
-    await _db.collection('users').doc(currentUser.uid).update({
-      'friends': FieldValue.arrayUnion([friendUid]),
-    });
-    return null;
-  }
 }
 
 final authNotifierProvider =
     StateNotifierProvider<AuthNotifier, AsyncValue<void>>((ref) {
   return AuthNotifier();
 });
-
-// ── Active program helper ─────────────────────────────────
-
-Future<void> setActiveProgram(String? programId) async {
-  final user = FirebaseAuth.instance.currentUser;
-  if (user == null) return;
-  await FirebaseFirestore.instance
-      .collection('users')
-      .doc(user.uid)
-      .update({'active_program_id': programId});
-}
 
 // ── Notes — Firestore-backed ──────────────────────────────
 

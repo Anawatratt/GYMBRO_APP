@@ -1,3 +1,4 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/auth_provider.dart';
@@ -164,6 +165,11 @@ class AppDrawer extends ConsumerWidget {
                           child: TextButton.icon(
                             onPressed: () async {
                               Navigator.pop(context);
+                              // Clear image cache so the next account's images
+                              // are always loaded fresh (never shows the wrong user's photo).
+                              PaintingBinding.instance.imageCache.clear();
+                              PaintingBinding.instance.imageCache.clearLiveImages();
+                              await CachedNetworkImage.evictFromCache('');
                               await ref.read(authServiceProvider).signOut();
                               if (context.mounted) {
                                 Navigator.pushAndRemoveUntil(

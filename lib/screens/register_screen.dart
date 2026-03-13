@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../app_state.dart';
+import '../providers/auth_provider.dart';
 import 'profile_setup_screen.dart';
 
 class RegisterScreen extends ConsumerStatefulWidget {
@@ -15,6 +15,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
   final _passwordCtrl = TextEditingController();
   final _confirmCtrl = TextEditingController();
   bool _obscure = true;
+  bool _loading = false;
 
   @override
   void dispose() {
@@ -42,15 +43,17 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
       return;
     }
 
-    await ref.read(authNotifierProvider.notifier).register(
-          username: username,
-          password: password,
-        );
+    setState(() => _loading = true);
+    try {
+      final email = '${username.toLowerCase()}@gymbro.app';
+      await ref.read(authServiceProvider).register(username, email, password);
+    } catch (e) {
+      if (mounted) _showError(_friendlyError(e));
+      setState(() => _loading = false);
+      return;
+    }
 
-    final authState = ref.read(authNotifierProvider);
-    if (authState.hasError && mounted) {
-      _showError(_friendlyError(authState.error!));
-    } else if (mounted) {
+    if (mounted) {
       Navigator.pushAndRemoveUntil(
         context,
         MaterialPageRoute(builder: (_) => const ProfileSetupScreen()),
@@ -78,8 +81,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final authState = ref.watch(authNotifierProvider);
-    final loading = authState.isLoading;
+    final loading = _loading;
 
     return Scaffold(
       backgroundColor: const Color(0xFF111111),

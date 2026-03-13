@@ -25,3 +25,9 @@ final currentUserDocProvider = StreamProvider<AppUser?>((ref) {
     error: (_, __) => Stream.value(null),
   );
 });
+
+/// Stream of any user's Firestore document by UID.
+final userByUidProvider =
+    StreamProvider.autoDispose.family<AppUser?, String>((ref, uid) {
+  return ref.watch(userServiceProvider).userStream(uid);
+});

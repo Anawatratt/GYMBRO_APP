@@ -11,6 +11,7 @@ analyzer:
   errors:
     deprecated_member_use: ignore
     unnecessary_underscores: ignore
+    use_null_aware_elements: ignore
 include: package:flutter_lints/flutter.yaml
 
 linter:

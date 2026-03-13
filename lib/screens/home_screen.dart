@@ -1,110 +1,22 @@
 import 'dart:io';
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import '../providers/notification_provider.dart';
 import '../providers/auth_provider.dart';
-import '../services/user_service.dart';
-import '../app_state.dart';
+import '../providers/program_provider.dart';
 import '../widgets/app_drawer.dart';
 import 'notifications_screen.dart';
 
-// ── Today's Workout data ──────────────────────────────────
-
-class _TodayExercise {
-  final String exerciseId;
-  final int sets;
-  final int reps;
-  final double? weight;
-  const _TodayExercise({
-    required this.exerciseId,
-    required this.sets,
-    required this.reps,
-    this.weight,
-  });
-}
-
-class _TodayWorkout {
-  final String programName;
-  final String sessionName;
-  final String programId;
-  final List<_TodayExercise> exercises;
-  const _TodayWorkout({
-    required this.programName,
-    required this.sessionName,
-    required this.programId,
-    this.exercises = const [],
-  });
-}
-
-final _todayWorkoutProvider =
-    FutureProvider.autoDispose<_TodayWorkout?>((ref) async {
-  final profile = ref.watch(userProfileProvider).value;
-  final programId = profile?.activeProgramId;
-  if (programId == null) return null;
-
-  final db = FirebaseFirestore.instance;
-  final today = DateTime.now().weekday; // 1=Mon … 7=Sun
-
-  final programDoc = await db.collection('programs').doc(programId).get();
-  if (!programDoc.exists) return null;
-  final programName = programDoc.data()?['program_name'] as String? ?? '';
-
-  final sessionsSnap = await db
-      .collection('programs')
-      .doc(programId)
-      .collection('sessions')
-      .where('day_number', isEqualTo: today)
-      .limit(1)
-      .get();
-
-  if (sessionsSnap.docs.isEmpty) {
-    return _TodayWorkout(
-        programName: programName, sessionName: 'Rest Day', programId: programId);
-  }
-
-  final sessionData = sessionsSnap.docs.first.data();
-  final sessionName = sessionData['session_name'] as String? ?? '';
-  final rawExercises = (sessionData['exercises'] as List<dynamic>? ?? []);
-  rawExercises.sort((a, b) =>
-      (a['order'] as int? ?? 0).compareTo(b['order'] as int? ?? 0));
-
-  final exercises = rawExercises.map((e) {
-    final map = e as Map<String, dynamic>;
-    return _TodayExercise(
-      exerciseId: map['exercise_id'] as String? ?? '',
-      sets: (map['sets'] as num?)?.toInt() ?? 0,
-      reps: (map['reps'] as num?)?.toInt() ?? 0,
-      weight: (map['weight'] as num?)?.toDouble(),
-    );
-  }).toList();
-
-  return _TodayWorkout(
-    programName: programName,
-    sessionName: sessionName,
-    programId: programId,
-    exercises: exercises,
-  );
-});
-
-class HomeScreen extends ConsumerStatefulWidget {
+class HomeScreen extends ConsumerWidget {
   const HomeScreen({super.key});
 
   @override
-  ConsumerState<HomeScreen> createState() => _HomeScreenState();
-}
-
-class _HomeScreenState extends ConsumerState<HomeScreen> {
-  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
-
-  @override
-  Widget build(BuildContext context) {
-    final profileAsync = ref.watch(userProfileProvider);
-
+  Widget build(BuildContext context, WidgetRef ref) {
+    final scaffoldKey = GlobalKey<ScaffoldState>();
     return Scaffold(
-      key: _scaffoldKey,
+      key: scaffoldKey,
       backgroundColor: const Color(0xFF111111),
       drawer: const AppDrawer(),
       drawerEnableOpenDragGesture: true,
@@ -114,14 +26,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _TopBar(scaffoldKey: _scaffoldKey),
+              _TopBar(scaffoldKey: scaffoldKey),
               const SizedBox(height: 20),
-              profileAsync.when(
-                data: (profile) => _HomeContent(profile: profile),
-                loading: () =>
-                    const Center(child: CircularProgressIndicator()),
-                error: (_, __) => const _HomeContent(profile: null),
-              ),
+              const _HomeContent(),
             ],
           ),
         ),
@@ -147,14 +54,23 @@ class _TopBar extends ConsumerWidget {
             icon: Icons.menu_rounded,
             onTap: () => scaffoldKey.currentState?.openDrawer(),
           ),
-          const Expanded(
-            child: Text(
-              'Home',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.w700,
-                color: Colors.white,
+          Expanded(
+            child: Center(
+              child: CachedNetworkImage(
+                imageUrl:
+                    'https://firebasestorage.googleapis.com/v0/b/gymbro-f4ff7.firebasestorage.app/o/Screenshot%202026-03-11%20134028.png?alt=media&token=57485e66-36dc-4bca-9ea1-bb5aad4265fa',
+                height: 36,
+                placeholder: (_, __) => const SizedBox(
+                  width: 36,
+                  height: 36,
+                  child: Center(
+                      child: CircularProgressIndicator(strokeWidth: 2)),
+                ),
+                errorWidget: (_, __, ___) => const Icon(
+                  Icons.fitness_center,
+                  color: Color(0xFFE53935),
+                  size: 28,
+                ),
               ),
             ),
           ),
@@ -175,8 +91,7 @@ class _TopBar extends ConsumerWidget {
                   child: Container(
                     padding: const EdgeInsets.all(3),
                     decoration: const BoxDecoration(
-                        color: Color(0xFFE53935),
-                        shape: BoxShape.circle),
+                        color: Color(0xFFE53935), shape: BoxShape.circle),
                     child: Text(
                       unread > 9 ? '9+' : '$unread',
                       style: const TextStyle(
@@ -222,8 +137,7 @@ class _NavBtn extends StatelessWidget {
 // ── Home Content ─────────────────────────────────────────
 
 class _HomeContent extends ConsumerStatefulWidget {
-  final UserProfile? profile;
-  const _HomeContent({this.profile});
+  const _HomeContent();
 
   @override
   ConsumerState<_HomeContent> createState() => _HomeContentState();
@@ -241,21 +155,19 @@ class _HomeContentState extends ConsumerState<_HomeContent> {
     );
     if (picked == null || !mounted) return;
 
-    final uid = FirebaseAuth.instance.currentUser?.uid;
-    if (uid == null) return;
+    final appUser = ref.read(currentUserDocProvider).value;
+    if (appUser == null) return;
 
     setState(() => _uploadingPhoto = true);
     try {
-      final svc = UserService();
-      final url = await svc.uploadProfileImage(uid, File(picked.path));
-      await svc.updateProfileImageUrl(uid, url);
+      final svc = ref.read(userServiceProvider);
+      final url = await svc.uploadProfileImage(appUser.uid, File(picked.path));
+      await svc.updateProfileImageUrl(appUser.uid, url);
+      await CachedNetworkImage.evictFromCache('profile_${appUser.uid}');
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Upload failed: $e'),
-            backgroundColor: Colors.red,
-          ),
+          SnackBar(content: Text('Upload failed: $e'), backgroundColor: Colors.red),
         );
       }
     } finally {
@@ -265,12 +177,12 @@ class _HomeContentState extends ConsumerState<_HomeContent> {
 
   @override
   Widget build(BuildContext context) {
-    final todayCount = ref.watch(_todayWorkoutProvider).value?.exercises.length ?? 0;
+    final todayCount =
+        ref.watch(todayWorkoutProvider).value?.exercises.length ?? 0;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _ProfileCard(
-          profile: widget.profile,
           onChangePhoto: _changePhoto,
           uploading: _uploadingPhoto,
           todayCount: todayCount,
@@ -279,9 +191,7 @@ class _HomeContentState extends ConsumerState<_HomeContent> {
         const Text(
           "Today's Workout",
           style: TextStyle(
-              fontSize: 24,
-              fontWeight: FontWeight.w700,
-              color: Colors.white),
+              fontSize: 24, fontWeight: FontWeight.w700, color: Colors.white),
         ),
         const SizedBox(height: 12),
         const _TodaysWorkoutCard(),
@@ -293,21 +203,22 @@ class _HomeContentState extends ConsumerState<_HomeContent> {
 // ── Profile Card ─────────────────────────────────────────
 
 class _ProfileCard extends ConsumerWidget {
-  final UserProfile? profile;
   final VoidCallback? onChangePhoto;
   final bool uploading;
   final int todayCount;
-  const _ProfileCard({this.profile, this.onChangePhoto, this.uploading = false, this.todayCount = 0});
+  const _ProfileCard(
+      {this.onChangePhoto, this.uploading = false, this.todayCount = 0});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final appUser = ref.watch(currentUserDocProvider).value;
     final streak = appUser?.dayStreak ?? 0;
-    // prefer AppUser.displayName, fall back to UserProfile.name
     final name = (appUser?.displayName.isNotEmpty == true)
         ? appUser!.displayName
-        : ((profile?.name ?? '').isNotEmpty ? profile!.name : 'User');
+        : 'User';
     final initials = name != 'User' ? name[0].toUpperCase() : '?';
+    final photoUrl =
+        (appUser?.photoUrl.isNotEmpty == true) ? appUser!.photoUrl : null;
 
     return Container(
       decoration: BoxDecoration(
@@ -343,11 +254,19 @@ class _ProfileCard extends ConsumerWidget {
                         ),
                       ),
                     ),
-                    if (profile?.imageUrl != null)
-                      Image.network(
-                        profile!.imageUrl!,
+                    if (photoUrl != null)
+                      CachedNetworkImage(
+                        imageUrl: photoUrl,
+                        cacheKey: 'profile_${appUser!.uid}',
                         fit: BoxFit.cover,
-                        errorBuilder: (_, __, ___) => Center(
+                        placeholder: (_, __) => Center(
+                          child: Text(initials,
+                              style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 44,
+                                  fontWeight: FontWeight.w800)),
+                        ),
+                        errorWidget: (_, __, ___) => Center(
                           child: Text(initials,
                               style: const TextStyle(
                                   color: Colors.white,
@@ -369,9 +288,7 @@ class _ProfileCard extends ConsumerWidget {
                           width: 28,
                           height: 28,
                           child: CircularProgressIndicator(
-                            color: Colors.white,
-                            strokeWidth: 2.5,
-                          ),
+                              color: Colors.white, strokeWidth: 2.5),
                         ),
                       )
                     else
@@ -391,11 +308,8 @@ class _ProfileCard extends ConsumerWidget {
                                   color: Colors.white.withAlpha(180),
                                   width: 1.5),
                             ),
-                            child: const Icon(
-                              Icons.camera_alt_rounded,
-                              color: Colors.white,
-                              size: 16,
-                            ),
+                            child: const Icon(Icons.camera_alt_rounded,
+                                color: Colors.white, size: 16),
                           ),
                         ),
                       ),
@@ -403,7 +317,7 @@ class _ProfileCard extends ConsumerWidget {
                 ),
               ),
 
-              // Right: name + stats (no boxes)
+              // Right: name + stats
               Expanded(
                 child: Padding(
                   padding: const EdgeInsets.fromLTRB(18, 18, 16, 18),
@@ -473,19 +387,16 @@ class _StatRaw extends StatelessWidget {
           children: [
             Icon(icon, size: 30, color: iconColor),
             const SizedBox(width: 5),
-            Text(
-              value,
-              style: const TextStyle(
-                  fontSize: 28,
-                  fontWeight: FontWeight.w800,
-                  color: Colors.white),
-            ),
+            Text(value,
+                style: const TextStyle(
+                    fontSize: 28,
+                    fontWeight: FontWeight.w800,
+                    color: Colors.white)),
           ],
         ),
-        Text(
-          label,
-          style: const TextStyle(fontSize: 11, color: Color(0xFF9E9E9E)),
-        ),
+        Text(label,
+            style:
+                const TextStyle(fontSize: 11, color: Color(0xFF9E9E9E))),
       ],
     );
   }
@@ -498,7 +409,7 @@ class _TodaysWorkoutCard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final todayAsync = ref.watch(_todayWorkoutProvider);
+    final todayAsync = ref.watch(todayWorkoutProvider);
     final programName = todayAsync.value?.programName ?? '';
     final sessionName = todayAsync.value?.sessionName ?? '';
     final programId = todayAsync.value?.programId ?? '';
@@ -583,20 +494,16 @@ class _TodaysWorkoutCard extends ConsumerWidget {
                             ),
                           ],
                         ),
-                        child: const Icon(
-                          Icons.play_arrow_rounded,
-                          color: Colors.white,
-                          size: 80,
-                        ),
+                        child: const Icon(Icons.play_arrow_rounded,
+                            color: Colors.white, size: 80),
                       ),
                       const SizedBox(height: 10),
                       const Text(
                         'Start Workout',
                         style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 14,
-                          fontWeight: FontWeight.w700,
-                        ),
+                            color: Colors.white,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w700),
                       ),
                     ],
                   ),

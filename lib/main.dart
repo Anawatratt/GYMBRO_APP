@@ -4,8 +4,6 @@ import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
 
 import 'providers/auth_provider.dart';
-import 'app_state.dart';
-import 'seed.dart';
 
 import 'screens/friends_screen.dart';
 import 'screens/home_screen.dart';
@@ -25,7 +23,7 @@ import 'screens/friend_profile_screen.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-  await seedAll();
+  // await seedAll(); // seed เสร็จแล้ว ไม่ต้องเรียกอีก
   runApp(const ProviderScope(child: GymbroApp()));
 }
 

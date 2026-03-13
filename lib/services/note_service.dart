@@ -28,8 +28,8 @@ class NoteService {
       'content': content,
       'createdAt': now,
       'updatedAt': now,
-      ?'taggedFriendUid': taggedFriendUid,
-      ?'taggedFriendName': taggedFriendName,
+      'taggedFriendUid': taggedFriendUid,
+      'taggedFriendName': taggedFriendName,
     });
   }
 

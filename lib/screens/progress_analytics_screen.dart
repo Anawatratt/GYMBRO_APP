@@ -4,7 +4,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../app_state.dart';
+import '../models/app_user.dart';
+import '../providers/auth_provider.dart';
 
 // ── Providers ────────────────────────────────────────────
 
@@ -140,8 +141,8 @@ class _ProgressAnalyticsScreenState
     final uid =
         widget.viewUid ?? FirebaseAuth.instance.currentUser?.uid ?? '';
     final profileAsync = widget.viewUid != null
-        ? ref.watch(profileByUidProvider(uid))
-        : ref.watch(userProfileProvider);
+        ? ref.watch(userByUidProvider(uid))
+        : ref.watch(currentUserDocProvider);
     final histAsync = ref.watch(_historyByUidProvider(uid));
     final exMapAsync = ref.watch(_exerciseMapProvider);
 
@@ -303,7 +304,7 @@ class _ProgressAnalyticsScreenState
 
   Widget _body(
     BuildContext context,
-    UserProfile? profile,
+    AppUser? profile,
     List<Map<String, dynamic>> history,
     Map<String, _ExerciseGroups> exMap,
   ) {
@@ -455,8 +456,11 @@ class _ProgressAnalyticsScreenState
     );
   }
 
-  Widget _profileBanner(UserProfile? profile) {
+  Widget _profileBanner(AppUser? profile) {
     const color = Color(0xFFE53935);
+    final photoUrl = (profile?.photoUrl.isNotEmpty == true) ? profile!.photoUrl : null;
+    final name = (profile?.displayName.isNotEmpty == true) ? profile!.displayName : 'User';
+    final initials = name != 'User' ? name[0].toUpperCase() : '?';
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -465,15 +469,15 @@ class _ProgressAnalyticsScreenState
         border: Border.all(color: color.withAlpha(40)),
       ),
       child: Row(children: [
-        profile?.imageUrl != null
+        photoUrl != null
             ? CircleAvatar(
                 radius: 22,
-                backgroundImage: NetworkImage(profile!.imageUrl!),
+                backgroundImage: NetworkImage(photoUrl),
               )
             : CircleAvatar(
                 radius: 22,
                 backgroundColor: color,
-                child: Text(profile?.initials ?? '?',
+                child: Text(initials,
                     style: const TextStyle(
                         color: Colors.white,
                         fontWeight: FontWeight.w700,
@@ -481,7 +485,7 @@ class _ProgressAnalyticsScreenState
               ),
         const SizedBox(width: 14),
         Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text("${profile?.name ?? 'User'}'s Progress",
+          Text("$name's Progress",
               style: const TextStyle(
                   fontSize: 17,
                   fontWeight: FontWeight.w800,

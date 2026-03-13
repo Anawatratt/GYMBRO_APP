@@ -1,28 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import '../app_state.dart';
+import '../providers/auth_provider.dart';
+import '../providers/program_provider.dart';
 
 class PlanListScreen extends ConsumerWidget {
   const PlanListScreen({super.key});
 
-  IconData _goalIcon(String goal) {
-    switch (goal) {
-      case 'muscle_gain':
-        return Icons.fitness_center;
-      case 'strength':
-        return Icons.bolt;
-      case 'general_fitness':
-        return Icons.directions_run;
-      default:
-        return Icons.sports_gymnastics;
-    }
-  }
-
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final profileName =
-        ref.watch(userProfileProvider).value?.name ?? 'Athlete';
+    final appUser = ref.watch(currentUserDocProvider).value;
+    final name = (appUser?.displayName.isNotEmpty == true)
+        ? appUser!.displayName
+        : 'Athlete';
+    final programsAsync = ref.watch(programsStreamProvider);
 
     return Scaffold(
       appBar: AppBar(title: const Text('Workout Plan')),
@@ -32,56 +22,49 @@ class PlanListScreen extends ConsumerWidget {
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
             child: Text(
-              'Get ready to train, $profileName',
+              'Get ready to train, $name',
               style: TextStyle(color: Colors.grey[500], fontSize: 15),
             ),
           ),
           const SizedBox(height: 16),
           Expanded(
-            child: StreamBuilder<QuerySnapshot>(
-              stream: FirebaseFirestore.instance
-                  .collection('programs')
-                  .snapshots(),
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-                if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+            child: programsAsync.when(
+              loading: () =>
+                  const Center(child: CircularProgressIndicator()),
+              error: (e, _) => Center(
+                child: Text('Error: $e',
+                    style: TextStyle(color: Colors.grey[400])),
+              ),
+              data: (programs) {
+                if (programs.isEmpty) {
                   return Center(
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(Icons.event_note, size: 48, color: Colors.grey[300]),
+                        Icon(Icons.event_note,
+                            size: 48, color: Colors.grey[300]),
                         const SizedBox(height: 8),
                         Text('No programs found',
-                            style: TextStyle(color: Colors.grey[400], fontSize: 15)),
+                            style: TextStyle(
+                                color: Colors.grey[400], fontSize: 15)),
                       ],
                     ),
                   );
                 }
 
-                final docs = snapshot.data!.docs;
-
                 return ListView.separated(
                   padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
-                  itemCount: docs.length,
+                  itemCount: programs.length,
                   separatorBuilder: (_, __) => const SizedBox(height: 10),
                   itemBuilder: (context, index) {
-                    final data = docs[index].data() as Map<String, dynamic>;
-                    final programId = docs[index].id;
-                    final name = data['program_name'] ?? '';
-                    final desc = data['description'] ?? '';
-                    final goal = data['goal'] ?? '';
-                    final diff = data['difficulty_level'] ?? '';
-                    final daysPerWeek = data['days_per_week'] ?? 0;
-                    final durationWeeks = data['duration_weeks'] ?? 0;
+                    final p = programs[index];
                     return GestureDetector(
                       onTap: () => Navigator.pushNamed(
                         context,
                         '/planDetail',
                         arguments: {
-                          'programId': programId,
-                          'programName': name,
+                          'programId': p.id,
+                          'programName': p.programName,
                         },
                       ),
                       child: Container(
@@ -99,25 +82,19 @@ class PlanListScreen extends ConsumerWidget {
                         ),
                         child: Row(
                           children: [
-                            Icon(_goalIcon(goal),
+                            Icon(p.goalIcon,
                                 size: 28, color: Colors.grey[400]),
                             const SizedBox(width: 14),
                             Expanded(
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Row(
-                                    children: [
-                                      Expanded(
-                                        child: Text(name,
-                                            style: const TextStyle(
-                                                fontSize: 15,
-                                                fontWeight: FontWeight.w700)),
-                                      ),
-                                    ],
-                                  ),
+                                  Text(p.programName,
+                                      style: const TextStyle(
+                                          fontSize: 15,
+                                          fontWeight: FontWeight.w700)),
                                   const SizedBox(height: 4),
-                                  Text(desc,
+                                  Text(p.description,
                                       style: TextStyle(
                                           color: Colors.grey[500],
                                           fontSize: 13),
@@ -128,9 +105,10 @@ class PlanListScreen extends ConsumerWidget {
                                     spacing: 6,
                                     runSpacing: 6,
                                     children: [
-                                      _mutedPill('$daysPerWeek days/wk'),
-                                      _mutedPill('$durationWeeks weeks'),
-                                      _mutedPill(_capitalize(diff)),
+                                      _mutedPill('${p.daysPerWeek} days/wk'),
+                                      _mutedPill('${p.durationWeeks} weeks'),
+                                      _mutedPill(_capitalize(
+                                          p.difficultyLevel)),
                                     ],
                                   ),
                                 ],

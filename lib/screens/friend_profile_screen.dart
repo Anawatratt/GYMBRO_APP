@@ -1,7 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../app_state.dart';
+import '../providers/auth_provider.dart';
 import 'notes_screen.dart';
 import 'progress_analytics_screen.dart';
 
@@ -54,7 +54,7 @@ class _FriendPlanTab extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final profileAsync = ref.watch(profileByUidProvider(uid));
+    final profileAsync = ref.watch(userByUidProvider(uid));
 
     return profileAsync.when(
       loading: () => const Center(child: CircularProgressIndicator()),
