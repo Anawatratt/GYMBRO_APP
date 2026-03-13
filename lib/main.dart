@@ -19,10 +19,12 @@ import 'screens/progress_breakdown_screen.dart';
 import 'screens/notes_screen.dart';
 import 'screens/workout_history_screen.dart';
 import 'screens/friend_profile_screen.dart';
+import 'services/local_notification_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  await LocalNotificationService.instance.initialize();
   // await seedAll(); // seed เสร็จแล้ว ไม่ต้องเรียกอีก
   runApp(const ProviderScope(child: GymbroApp()));
 }

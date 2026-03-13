@@ -14,6 +14,8 @@ class HomeScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // Keep the notification watcher alive so banners pop up anytime Home is mounted
+    ref.watch(notificationWatcherProvider);
     final scaffoldKey = GlobalKey<ScaffoldState>();
     return Scaffold(
       key: scaffoldKey,

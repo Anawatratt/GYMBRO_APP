@@ -48,6 +48,7 @@ dependencies:
   mobile_scanner: ^5.2.3
   permission_handler: ^11.3.1
   gal: ^2.3.0
+  flutter_local_notifications: ^20.0.0
 
 dev_dependencies:
   flutter_test:
@@ -66,9 +67,6 @@ flutter_launcher_icons:
     generate: false
   macos:
     generate: false
-
-# For information on the generic Dart part of this file, see the
-# following page: https://dart.dev/tools/pub/pubspec
 
 # The following section is specific to Flutter packages.
 flutter:
